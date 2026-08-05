@@ -10,6 +10,19 @@ export interface SelectionSlice {
   count: number
 }
 
+export function selectionHighlightRectsOverlap(
+  left: SelectionHighlightRect,
+  right: SelectionHighlightRect,
+): boolean {
+  const overlapWidth =
+    Math.min(left.origin.x + left.size.width, right.origin.x + right.size.width) -
+    Math.max(left.origin.x, right.origin.x)
+  const overlapHeight =
+    Math.min(left.origin.y + left.size.height, right.origin.y + right.size.height) -
+    Math.max(left.origin.y, right.origin.y)
+  return overlapWidth > 0.5 && overlapHeight > 0.5
+}
+
 function verticalOverlap(left: SelectionHighlightRect, right: SelectionHighlightRect): number {
   const top = Math.max(left.origin.y, right.origin.y)
   const bottom = Math.min(left.origin.y + left.size.height, right.origin.y + right.size.height)

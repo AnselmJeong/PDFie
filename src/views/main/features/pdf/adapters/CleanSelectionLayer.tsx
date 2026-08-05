@@ -4,7 +4,7 @@ import { type SelectionSelectionMenuRenderFn, useSelectionPlugin } from "@embedp
 import { CounterRotate } from "@embedpdf/utils/react"
 import { useEffect, useMemo, useState } from "react"
 import type { PdfTextHighlight } from "../../../../../shared/pdf/domain"
-import { createPreciseSelectionHighlightRects } from "./selection-highlight"
+import { createPreciseSelectionHighlightRects, selectionHighlightRectsOverlap } from "./selection-highlight"
 
 export function CleanSelectionLayer({
   documentId,
@@ -58,10 +58,21 @@ export function CleanSelectionLayer({
       ),
     [highlights, pageIndex],
   )
+  const visibleSavedHighlights = useMemo(
+    () =>
+      savedHighlights.filter(({ rect }) => {
+        const savedRect = {
+          origin: { x: rect.x, y: rect.y },
+          size: { width: rect.width, height: rect.height },
+        }
+        return !rects.some((selectionRect) => selectionHighlightRectsOverlap(savedRect, selectionRect))
+      }),
+    [rects, savedHighlights],
+  )
   return (
     <>
       <div className="clean-selection-layer" aria-hidden="true">
-        {savedHighlights.map(({ annotation, rect }) => (
+        {visibleSavedHighlights.map(({ annotation, rect }) => (
           <span
             key={`${annotation.id}-${rect.x}-${rect.y}-${rect.width}-${rect.height}`}
             className="saved-text-highlight"

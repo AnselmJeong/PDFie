@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   createPreciseSelectionHighlightRects,
   mergeSelectionHighlightRects,
+  selectionHighlightRectsOverlap,
 } from "../../src/views/main/features/pdf/adapters/selection-highlight"
 
 describe("selection highlight rect merging", () => {
@@ -23,6 +24,26 @@ describe("selection highlight rect merging", () => {
         { origin: { x: 10, y: 36 }, size: { width: 40, height: 10 } },
       ]),
     ).toHaveLength(3)
+  })
+})
+
+describe("selection highlight overlap", () => {
+  it("detects a saved highlight beneath the active selection", () => {
+    expect(
+      selectionHighlightRectsOverlap(
+        { origin: { x: 10, y: 20 }, size: { width: 80, height: 12 } },
+        { origin: { x: 35, y: 20 }, size: { width: 30, height: 12 } },
+      ),
+    ).toBe(true)
+  })
+
+  it("does not treat adjacent line bands as overlapping", () => {
+    expect(
+      selectionHighlightRectsOverlap(
+        { origin: { x: 10, y: 20 }, size: { width: 80, height: 12 } },
+        { origin: { x: 10, y: 32 }, size: { width: 80, height: 12 } },
+      ),
+    ).toBe(false)
   })
 })
 

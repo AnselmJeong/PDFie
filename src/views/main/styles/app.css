@@ -553,8 +553,7 @@ textarea:focus-visible {
 .clean-selection-highlight {
   position: absolute;
   border-radius: 1px;
-  background: rgba(80, 116, 196, 0.27);
-  box-shadow: inset 0 0 0 0.5px rgba(55, 90, 170, 0.1);
+  background: rgba(80, 116, 196, 0.25);
   pointer-events: none;
 }
 .saved-text-highlight {
