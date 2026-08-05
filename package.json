@@ -1,0 +1,58 @@
+{
+  "name": "pdfie",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A focused macOS PDF reader for research papers and books",
+  "scripts": {
+    "prepare:electrobun": "bun run scripts/prepare-electrobun-cli.ts",
+    "dev": "bun run prepare:electrobun && PDFIE_PROJECT_ROOT=$PWD electrobun dev",
+    "dev:watch": "bun run prepare:electrobun && PDFIE_PROJECT_ROOT=$PWD electrobun dev --watch",
+    "start": "bun run prepare:electrobun && PDFIE_PROJECT_ROOT=$PWD electrobun run",
+    "build:dev": "bun run prepare:electrobun && electrobun build",
+    "build:stable": "bun run prepare:electrobun && electrobun build --env=stable",
+    "verify:package": "bun run scripts/verify-packaged-app.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "test": "vitest run && bun run test:bridge",
+    "test:bridge": "bun run scripts/test-source-bridge.ts",
+    "test:viewer": "vitest run tests/golden-selection"
+  },
+  "dependencies": {
+    "@embedpdf/core": "2.14.4",
+    "@embedpdf/engines": "2.14.4",
+    "@embedpdf/pdfium": "2.14.4",
+    "@embedpdf/plugin-bookmark": "2.14.4",
+    "@embedpdf/plugin-document-manager": "2.14.4",
+    "@embedpdf/plugin-interaction-manager": "2.14.4",
+    "@embedpdf/plugin-pan": "2.14.4",
+    "@embedpdf/plugin-render": "2.14.4",
+    "@embedpdf/plugin-rotate": "2.14.4",
+    "@embedpdf/plugin-scroll": "2.14.4",
+    "@embedpdf/plugin-search": "2.14.4",
+    "@embedpdf/plugin-selection": "2.14.4",
+    "@embedpdf/plugin-spread": "2.14.4",
+    "@embedpdf/plugin-thumbnail": "2.14.4",
+    "@embedpdf/plugin-tiling": "2.14.4",
+    "@embedpdf/plugin-viewport": "2.14.4",
+    "@embedpdf/plugin-zoom": "2.14.4",
+    "electrobun": "1.18.1",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.2.0",
+    "@types/bun": "latest",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/three": "^0.181.0",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

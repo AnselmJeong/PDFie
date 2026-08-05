@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self' views: blob:; script-src 'self' views: blob: 'wasm-unsafe-eval'; style-src 'self' views: 'unsafe-inline'; img-src 'self' views: blob: data:; connect-src 'self' views: blob: http://127.0.0.1:* ws://127.0.0.1:* ws://localhost:*; worker-src 'self' views: blob:; font-src 'self' views: data:"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PDFie</title>
+    <link rel="stylesheet" href="views://main/app.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script src="views://main/bootstrap.js"></script>
+    <script type="module" src="views://main/index.js"></script>
+  </body>
+</html>

@@ -1,0 +1,142 @@
+[
+  {
+    "fixture": "single-column-en.pdf",
+    "caseId": "title",
+    "expectedText": "Selection Fidelity in Academic PDF Readers",
+    "expectedPages": [1],
+    "notes": "Title punctuation and word order."
+  },
+  {
+    "fixture": "single-column-en.pdf",
+    "caseId": "abstract-sentence",
+    "expectedText": "Accurate selection preserves punctuation, reading order, and the author's intended meaning.",
+    "expectedPages": [1],
+    "notes": "Apostrophe and period are preserved."
+  },
+  {
+    "fixture": "single-column-en.pdf",
+    "caseId": "methods",
+    "expectedText": "We compare text, page numbers, and PDF-coordinate rectangles under several zoom levels.",
+    "expectedPages": [1],
+    "notes": "Hyphen inside a lexical term is preserved."
+  },
+  {
+    "fixture": "two-column-paper.pdf",
+    "caseId": "left-column",
+    "expectedText": "The left argument begins here.\nIt continues without borrowing text\nfrom the neighboring column.",
+    "expectedPages": [1],
+    "notes": "Right column must not be included."
+  },
+  {
+    "fixture": "two-column-paper.pdf",
+    "caseId": "right-column",
+    "expectedText": "The right argument is independent.\nSelection must not jump sideways\nbefore the left column is complete.",
+    "expectedPages": [1],
+    "notes": "Left column must not be included."
+  },
+  {
+    "fixture": "two-column-paper.pdf",
+    "caseId": "footnote",
+    "expectedText": "1 Footnote evidence stays local.",
+    "expectedPages": [1],
+    "notes": "Footnote stays in the right column."
+  },
+  {
+    "fixture": "korean-paper.pdf",
+    "caseId": "korean-first",
+    "expectedText": "초록: 정확한 선택은 조사와 문장부호를 그대로 보존해야 한다.",
+    "expectedPages": [1],
+    "notes": "Korean particles and punctuation."
+  },
+  {
+    "fixture": "korean-paper.pdf",
+    "caseId": "korean-order",
+    "expectedText": "여러 줄을 선택해도 읽는 순서가 바뀌지 않아야 한다.",
+    "expectedPages": [1],
+    "notes": "Korean reading order."
+  },
+  {
+    "fixture": "korean-paper.pdf",
+    "caseId": "korean-conclusion",
+    "expectedText": "결론: 원문을 바꾸지 않는 것이 가장 중요한 기준이다.",
+    "expectedPages": [1],
+    "notes": "Korean colon and sentence ending."
+  },
+  {
+    "fixture": "ligature-hyphen.pdf",
+    "caseId": "ligature-words",
+    "expectedText": "The office workflow evaluates efficient affine transforms and scientific figures.",
+    "expectedPages": [1],
+    "notes": "Office and efficient are common ligature candidates."
+  },
+  {
+    "fixture": "ligature-hyphen.pdf",
+    "caseId": "line-hyphen",
+    "expectedText": "A deliberately hyphen-\nated word crosses the visual line boundary.",
+    "expectedPages": [1],
+    "notes": "Raw selection keeps visible line-end hyphen."
+  },
+  {
+    "fixture": "ligature-hyphen.pdf",
+    "caseId": "superscript-like",
+    "expectedText": "Superscript-like evidence uses x2 and a footnote marker 2.",
+    "expectedPages": [1],
+    "notes": "Baseline digits remain ordered."
+  },
+  {
+    "fixture": "rotated-page.pdf",
+    "caseId": "rotated-title",
+    "expectedText": "Rotated page fixture",
+    "expectedPages": [1],
+    "notes": "Rect must align at 90 degrees."
+  },
+  {
+    "fixture": "rotated-page.pdf",
+    "caseId": "rotated-sentence",
+    "expectedText": "Selection rectangles should remain aligned after a ninety degree rotation.",
+    "expectedPages": [1],
+    "notes": "Text and rect after rotation."
+  },
+  {
+    "fixture": "multi-page.pdf",
+    "caseId": "page-one",
+    "expectedText": "The passage on page 1 belongs to one continuous argument.",
+    "expectedPages": [1],
+    "notes": "Single page control."
+  },
+  {
+    "fixture": "multi-page.pdf",
+    "caseId": "pages-one-two",
+    "expectedText": "Cross-page selection must preserve a separate rectangle list for every page.\nMulti-page selection · page 2",
+    "expectedPages": [1, 2],
+    "notes": "Cross-page selection owns two page entries."
+  },
+  {
+    "fixture": "multi-page.pdf",
+    "caseId": "pages-two-three",
+    "expectedText": "Cross-page selection must preserve a separate rectangle list for every page.\nMulti-page selection · page 3",
+    "expectedPages": [2, 3],
+    "notes": "Cross-page selection remains ordered."
+  },
+  {
+    "fixture": "scanned-image.pdf",
+    "caseId": "no-native-text",
+    "expectedText": "",
+    "expectedPages": [],
+    "notes": "Viewer must explain that no selectable text layer exists."
+  },
+  {
+    "fixture": "long-book.pdf",
+    "caseId": "page-160",
+    "expectedText": "Only visible pages should retain rendered tiles in memory.",
+    "expectedPages": [160],
+    "notes": "Deep virtualized page selection."
+  },
+  {
+    "fixture": "nested-bookmarks.pdf",
+    "caseId": "nested-chapter",
+    "expectedText": "Part headings group chapters but do not own chat sessions.",
+    "expectedPages": [17],
+    "notes": "Nested bookmark navigation followed by selection."
+  }
+]
