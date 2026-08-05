@@ -1,7 +1,13 @@
 import type { PluginRegistry } from "@embedpdf/core"
 import { EmbedPDF } from "@embedpdf/core/react"
 import { usePdfiumEngine } from "@embedpdf/engines/react"
-import { PdfActionType, type PdfBookmarkObject, PdfErrorCode, Rotation } from "@embedpdf/models"
+import {
+  PdfActionType,
+  type PdfBookmarkObject,
+  PdfErrorCode,
+  Rotation,
+  type SearchResult,
+} from "@embedpdf/models"
 import { useBookmarkCapability } from "@embedpdf/plugin-bookmark/react"
 import { DocumentContent } from "@embedpdf/plugin-document-manager/react"
 import { PagePointerProvider } from "@embedpdf/plugin-interaction-manager/react"
@@ -10,12 +16,10 @@ import { Scroller, useScroll } from "@embedpdf/plugin-scroll/react"
 import { SearchLayer, useSearch } from "@embedpdf/plugin-search/react"
 import { useSelectionCapability } from "@embedpdf/plugin-selection/react"
 import { SpreadMode, useSpread } from "@embedpdf/plugin-spread/react"
-import { ThumbImg, ThumbnailsPane } from "@embedpdf/plugin-thumbnail/react"
 import { TilingLayer } from "@embedpdf/plugin-tiling/react"
 import { Viewport } from "@embedpdf/plugin-viewport/react"
 import { useZoom, ZoomMode } from "@embedpdf/plugin-zoom/react"
 import {
-  BookOpen,
   ChevronLeft,
   ChevronRight,
   Columns2,
@@ -114,6 +118,34 @@ function isEditableKeyboardTarget(target: EventTarget | null): boolean {
   return Boolean(target.closest("input, textarea, select, [contenteditable]:not([contenteditable='false'])"))
 }
 
+export function getSearchResultScrollTarget(result: SearchResult) {
+  const rect = result.rects[0]
+  return {
+    pageNumber: result.pageIndex + 1,
+    ...(rect
+      ? {
+          pageCoordinates: {
+            x: rect.origin.x + rect.size.width / 2,
+            y: rect.origin.y + rect.size.height / 2,
+          },
+          alignX: 50,
+          alignY: 35,
+        }
+      : {}),
+    behavior: "smooth" as const,
+  }
+}
+
+function groupSearchResultsByPage(results: SearchResult[]) {
+  const groups = new Map<number, Array<{ index: number; result: SearchResult }>>()
+  results.forEach((result, index) => {
+    const pageResults = groups.get(result.pageIndex) ?? []
+    pageResults.push({ index, result })
+    groups.set(result.pageIndex, pageResults)
+  })
+  return [...groups.entries()].map(([pageIndex, pageResults]) => ({ pageIndex, pageResults }))
+}
+
 function IconButton({
   label,
   onClick,
@@ -189,16 +221,18 @@ function ReaderChrome({
   const { provides: selection } = useSelectionCapability()
   const { provides: bookmark } = useBookmarkCapability()
   const [railOpen, setRailOpen] = useState(true)
-  const [railMode, setRailMode] = useState<"thumbnails" | "outline">("thumbnails")
+  const [railMode, setRailMode] = useState<"search" | "outline">("outline")
   const [outline, setOutline] = useState<PdfOutlineNode[]>([])
   const [outlineLoaded, setOutlineLoaded] = useState(false)
-  const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectionMenu, setSelectionMenu] = useState<PdfSelection | null>(null)
   const [highlights, setHighlights] = useState<PdfTextHighlight[]>(initialView.highlights)
   const [qaResults, setQaResults] = useState<GoldenSelectionResult[] | null>(null)
   const [qaRunning, setQaRunning] = useState(false)
   const restoredViewApplied = useRef(false)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const searchResultsRef = useRef<HTMLDivElement>(null)
+  const lastAutoNavigatedResult = useRef("")
 
   useEffect(() => {
     if (restoredViewApplied.current || !scroll || !rotate || !scrollState.totalPages) return
@@ -278,11 +312,73 @@ function ReaderChrome({
     })
   }, [onStatusChange, rotation, scrollState.currentPage, scrollState.totalPages, zoomState.currentZoomLevel])
 
+  const openSearch = useCallback(() => {
+    setRailOpen(true)
+    setRailMode("search")
+  }, [])
+
+  const closeSearch = useCallback(() => {
+    search?.stopSearch()
+    setSearchQuery("")
+    setRailMode("outline")
+  }, [search])
+
+  useEffect(() => {
+    if (!railOpen || railMode !== "search") return
+    requestAnimationFrame(() => searchInputRef.current?.focus())
+  }, [railMode, railOpen])
+
+  const scrollToSearchResult = useCallback(
+    (result: SearchResult) => scroll?.scrollToPage(getSearchResultScrollTarget(result)),
+    [scroll],
+  )
+
+  const activateSearchResult = useCallback(
+    (index: number) => {
+      const result = searchState.results[index]
+      if (!search || !result) return
+      search.goToResult(index)
+      scrollToSearchResult(result)
+    },
+    [scrollToSearchResult, search, searchState.results],
+  )
+
+  useEffect(() => {
+    const result = searchState.results[searchState.activeResultIndex]
+    if (railMode !== "search" || !result) return
+    const resultKey = `${searchState.query}:${searchState.activeResultIndex}:${result.pageIndex}:${result.charIndex}`
+    if (lastAutoNavigatedResult.current === resultKey) return
+    lastAutoNavigatedResult.current = resultKey
+    scrollToSearchResult(result)
+    requestAnimationFrame(() => {
+      const activeItem = searchResultsRef.current?.querySelector<HTMLElement>(
+        `[data-search-result-index="${searchState.activeResultIndex}"]`,
+      )
+      activeItem?.scrollIntoView({ block: "nearest" })
+    })
+  }, [railMode, scrollToSearchResult, searchState.activeResultIndex, searchState.query, searchState.results])
+
   const runSearch = useCallback(() => {
     const query = searchQuery.trim()
     if (!query || !search) return
+    openSearch()
     search.searchAllPages(query)
-  }, [search, searchQuery])
+  }, [openSearch, search, searchQuery])
+
+  const navigateSearchResult = useCallback(
+    (direction: -1 | 1) => {
+      if (!search) return
+      const index = direction < 0 ? search.previousResult() : search.nextResult()
+      const result = searchState.results[index]
+      if (result) scrollToSearchResult(result)
+    },
+    [scrollToSearchResult, search, searchState.results],
+  )
+
+  const searchResultGroups = useMemo(
+    () => groupSearchResultsByPage(searchState.results),
+    [searchState.results],
+  )
 
   const toggleSpread = useCallback(() => {
     if (!spread || !zoom) return
@@ -363,7 +459,7 @@ function ReaderChrome({
       const mod = event.metaKey || event.ctrlKey
       if (mod && event.key.toLowerCase() === "f") {
         event.preventDefault()
-        setSearchOpen(true)
+        openSearch()
       }
       if (mod && event.shiftKey && event.code === "KeyT") {
         event.preventDefault()
@@ -383,7 +479,7 @@ function ReaderChrome({
       }
       if (event.key === "Escape") {
         if (selectionMenu) clearSelection()
-        else setSearchOpen(false)
+        else if (railMode === "search") closeSearch()
       }
       if (mod && event.key.toLowerCase() === "c" && selectionMenu) {
         event.preventDefault()
@@ -400,7 +496,7 @@ function ReaderChrome({
     }
     window.addEventListener("keydown", keydown, true)
     return () => window.removeEventListener("keydown", keydown, true)
-  }, [clearSelection, runGoldenQa, scroll, selectionMenu, zoom])
+  }, [clearSelection, closeSearch, openSearch, railMode, runGoldenQa, scroll, selectionMenu, zoom])
 
   return (
     <section className="reader-shell" aria-label={`PDF reader: ${source.fileName}`}>
@@ -467,7 +563,7 @@ function ReaderChrome({
           <IconButton label="시계 방향으로 회전" onClick={() => rotate?.rotateForward()}>
             <RotateCw size={16} />
           </IconButton>
-          <IconButton label="문서 검색" onClick={() => setSearchOpen((value) => !value)}>
+          <IconButton label="문서 검색" onClick={openSearch}>
             <Search size={16} />
           </IconButton>
           <IconButton label="Selection golden QA" onClick={() => void runGoldenQa()}>
@@ -479,79 +575,104 @@ function ReaderChrome({
         </div>
       </header>
 
-      {searchOpen && (
-        <form
-          className="search-bar"
-          onSubmit={(event) => {
-            event.preventDefault()
-            runSearch()
-          }}
-        >
-          <Search size={14} aria-hidden="true" />
-          <input
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="PDF에서 검색"
-            aria-label="PDF 검색어"
-          />
-          <span>
-            {searchState.total ? `${searchState.activeResultIndex + 1} / ${searchState.total}` : ""}
-          </span>
-          <IconButton label="이전 검색 결과" onClick={() => search?.previousResult()}>
-            <ChevronLeft size={14} />
-          </IconButton>
-          <IconButton label="다음 검색 결과" onClick={() => search?.nextResult()}>
-            <ChevronRight size={14} />
-          </IconButton>
-          <IconButton
-            label="검색 닫기"
-            onClick={() => {
-              search?.stopSearch()
-              setSearchOpen(false)
-            }}
-          >
-            <X size={14} />
-          </IconButton>
-        </form>
-      )}
-
       <div className="reader-content">
         {railOpen && (
           <aside className="navigation-rail">
             <div className="rail-tabs" role="tablist" aria-label="문서 탐색">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={railMode === "thumbnails"}
-                onClick={() => setRailMode("thumbnails")}
-              >
-                <BookOpen size={14} /> 페이지
+              <button type="button" role="tab" aria-selected={railMode === "search"} onClick={openSearch}>
+                <Search size={14} /> 검색
               </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={railMode === "outline"}
-                onClick={() => setRailMode("outline")}
-              >
+              <button type="button" role="tab" aria-selected={railMode === "outline"} onClick={closeSearch}>
                 <ListTree size={14} /> 목차
               </button>
             </div>
-            {railMode === "thumbnails" ? (
-              <ThumbnailsPane documentId={documentId} className="thumbnail-list">
-                {(meta) => (
-                  <button
-                    type="button"
-                    key={meta.pageIndex}
-                    className={`thumbnail-item ${meta.pageIndex + 1 === scrollState.currentPage ? "is-active" : ""}`}
-                    onClick={() =>
-                      scroll?.scrollToPage({ pageNumber: meta.pageIndex + 1, behavior: "smooth" })
-                    }
-                  >
-                    <ThumbImg documentId={documentId} meta={meta} />
-                    <span>{meta.pageIndex + 1}</span>
-                  </button>
-                )}
-              </ThumbnailsPane>
+            {railMode === "search" ? (
+              <section className="search-panel" aria-label="PDF 검색 결과">
+                <form
+                  className="rail-search-form"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    runSearch()
+                  }}
+                >
+                  <div className="search-query-row">
+                    <Search size={14} aria-hidden="true" />
+                    <input
+                      ref={searchInputRef}
+                      value={searchQuery}
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                      placeholder="PDF에서 검색"
+                      aria-label="PDF 검색어"
+                    />
+                    <IconButton label="검색 닫기" onClick={closeSearch}>
+                      <X size={14} />
+                    </IconButton>
+                  </div>
+                  <div className="search-result-controls">
+                    <span aria-live="polite">
+                      {searchState.loading
+                        ? "검색 중…"
+                        : searchState.query
+                          ? `${searchState.total}개 결과`
+                          : "검색어를 입력하세요"}
+                    </span>
+                    <div>
+                      <IconButton
+                        label="이전 검색 결과"
+                        onClick={() => navigateSearchResult(-1)}
+                        disabled={!searchState.total}
+                      >
+                        <ChevronLeft size={14} />
+                      </IconButton>
+                      <IconButton
+                        label="다음 검색 결과"
+                        onClick={() => navigateSearchResult(1)}
+                        disabled={!searchState.total}
+                      >
+                        <ChevronRight size={14} />
+                      </IconButton>
+                    </div>
+                  </div>
+                </form>
+
+                <div className="search-results" ref={searchResultsRef}>
+                  {searchResultGroups.map(({ pageIndex, pageResults }) => (
+                    <section className="search-page-group" key={pageIndex}>
+                      <header>
+                        <strong>p. {pageIndex + 1}</strong>
+                        <span>{pageResults.length}개</span>
+                      </header>
+                      <ol>
+                        {pageResults.map(({ index, result }) => (
+                          <li key={`${result.pageIndex}-${result.charIndex}`}>
+                            <button
+                              type="button"
+                              className="search-result-item"
+                              aria-current={searchState.activeResultIndex === index ? "true" : undefined}
+                              data-search-result-index={index}
+                              onClick={() => activateSearchResult(index)}
+                            >
+                              <span>
+                                {result.context.truncatedLeft ? "…" : ""}
+                                {result.context.before}
+                                <mark>{result.context.match}</mark>
+                                {result.context.after}
+                                {result.context.truncatedRight ? "…" : ""}
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ol>
+                    </section>
+                  ))}
+                  {!searchState.loading && searchState.query && !searchState.total && (
+                    <div className="search-empty">
+                      <Search size={18} />
+                      <p>일치하는 구절이 없습니다.</p>
+                    </div>
+                  )}
+                </div>
+              </section>
             ) : outline.length ? (
               <nav className="outline-panel" aria-label="PDF 목차">
                 <OutlineTree

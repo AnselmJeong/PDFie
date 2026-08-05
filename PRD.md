@@ -71,7 +71,8 @@ PDFie는 논문과 단행본을 집중해서 읽으면서 선택한 문장과 �
 
 - macOS 14 이상을 대상으로 하는 Electrobun desktop app으로 로컬 PDF를 연다.
 - 기본 renderer는 CEF를 포함하지 않은 macOS native WebKit이며, Phase 0 acceptance gate를 통과한 경우에만 이 runtime 결정을 확정한다.
-- text selection, copy, search, zoom, rotation, page navigation, thumbnail을 제공한다.
+- text selection, copy, 문맥 검색 결과, zoom, rotation, page navigation을 제공한다.
+- 검색 결과는 일치어의 앞뒤 구절과 page provenance를 표시하며 선택 시 정확한 일치 위치로 이동한다.
 - 선택 결과에 `text`, `pageNumber`, `rects/bbox`가 포함된다.
 - PDF를 먼저 `article`, `book`, `unknown`으로 빠르게 분류한다.
 - article은 chapter 분할을 생략한다.
@@ -452,12 +453,12 @@ MVP quick action은 MD Reader의 기능을 유지하되 PDF provenance를 붙인
 ### Layout
 
 - 상단: PDF 전용 toolbar
-- 왼쪽: 접을 수 있는 thumbnail/bookmark rail
+- 왼쪽: 접을 수 있는 search/bookmark rail
 - 중앙: 원본 PDF reading surface
 - 오른쪽: MD Reader 기반 resizable AI sidebar
 - 하단: page, zoom, 문서 유형, analysis 상태를 담는 얇은 status bar
 
-AI sidebar가 닫히면 reading surface가 즉시 확장된다. thumbnail rail과 AI sidebar는 독립적으로 열고 닫을 수 있다.
+AI sidebar가 닫히면 reading surface가 즉시 확장된다. search/bookmark rail과 AI sidebar는 독립적으로 열고 닫을 수 있다. 검색 결과는 page thumbnail 없이 페이지별로 묶은 일치 구절을 보여주며, 결과 선택과 이전·다음 이동은 본문의 정확한 검색 좌표와 활성 highlight를 함께 갱신한다.
 
 ### 시각 방향
 
@@ -482,7 +483,7 @@ MVP는 새 브랜드를 발명하지 않는다. MD Reader의 차분하고 편집
 - `Cmd/Ctrl+O`: PDF 열기
 - `Cmd/Ctrl+/`: AI sidebar toggle
 - `Cmd/Ctrl+F`: PDF 검색
-- `Cmd/Ctrl+Shift+T`: thumbnail/bookmark rail toggle
+- `Cmd/Ctrl+Shift+T`: search/bookmark rail toggle
 - `Cmd/Ctrl+=` / `Cmd/Ctrl+-`: zoom
 - `Escape`: selection menu 또는 AI streaming 중지
 - 모든 control은 keyboard focus와 visible focus ring을 제공한다.

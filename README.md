@@ -1,6 +1,6 @@
 # PDFie
 
-PDFie is a native-WebKit macOS reader for academic papers and books. It renders the original PDF, preserves page-aware selections, provides thumbnail/bookmark navigation, classifies article versus book structure, restores reading state, and can send only the selected passage to an OpenAI-compatible chat endpoint.
+PDFie is a native-WebKit macOS reader for academic papers and books. It renders the original PDF, preserves page-aware selections, provides contextual search/bookmark navigation, classifies article versus book structure, restores reading state, and can send only the selected passage to an OpenAI-compatible chat endpoint.
 
 ## Requirements
 

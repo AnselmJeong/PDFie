@@ -200,7 +200,6 @@ pointer drag 자체는 자동화가 불안정할 수 있으므로 두 층으로 
    - viewport, scroll, render/tiling
    - selection
    - search
-   - thumbnail
    - bookmark
    - zoom, rotate
 3. local PDF는 0.2에서 선택한 `PdfSourceBridge`로 연다.
@@ -867,7 +866,7 @@ Preppy manifest/document/chunks를 PDFie `PdfSemanticUnit`과 `PdfTextChunk`로 
 
 - MD Reader의 AI sidebar width, typography, streaming layout을 유지한다.
 - PDF viewer 기본 toolbar를 그대로 중복 표시하지 않는다.
-- thumbnail/bookmark rail과 AI sidebar가 좁은 창에서 충돌하지 않게 한다.
+- 일치 구절을 표시하는 search/bookmark rail과 AI sidebar가 좁은 창에서 충돌하지 않게 한다.
 - 중요하지 않은 분석 세부사항은 status popover에 progressive disclosure한다.
 - 모든 상태를 card 안에 넣거나 modal로 차단하지 않는다.
 

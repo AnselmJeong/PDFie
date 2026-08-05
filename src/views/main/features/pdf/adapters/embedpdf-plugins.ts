@@ -9,7 +9,6 @@ import { ScrollPluginPackage, ScrollStrategy } from "@embedpdf/plugin-scroll/rea
 import { SearchPluginPackage } from "@embedpdf/plugin-search/react"
 import { SelectionPluginPackage } from "@embedpdf/plugin-selection/react"
 import { SpreadMode, SpreadPluginPackage } from "@embedpdf/plugin-spread/react"
-import { ThumbnailPluginPackage } from "@embedpdf/plugin-thumbnail/react"
 import { TilingPluginPackage } from "@embedpdf/plugin-tiling/react"
 import { ViewportPluginPackage } from "@embedpdf/plugin-viewport/react"
 import { ZoomMode, ZoomPluginPackage } from "@embedpdf/plugin-zoom/react"
@@ -60,14 +59,6 @@ export function createPdfPlugins(
     createPluginRegistration(PanPluginPackage, { defaultMode: "never" }),
     createPluginRegistration(RotatePluginPackage, { defaultRotation: 0 }),
     createPluginRegistration(SearchPluginPackage, { showAllResults: true }),
-    createPluginRegistration(ThumbnailPluginPackage, {
-      width: 116,
-      gap: 12,
-      buffer: 4,
-      labelHeight: 20,
-      autoScroll: true,
-      paddingY: 14,
-    }),
     createPluginRegistration(BookmarkPluginPackage),
     createPluginRegistration(SelectionPluginPackage, {
       minSelectionDragDistance: 2,

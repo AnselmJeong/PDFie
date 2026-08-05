@@ -5,7 +5,7 @@ Date: 2026-08-04
 
 ## Decision
 
-Use EmbedPDF headless 2.14.4 with its PDFium engine and a PDFie-owned React reader shell. The enabled plugins are document manager, viewport, vertical virtual scroll, two-page spread, render/tiling, zoom, interaction/pan, rotation, search, thumbnails, bookmarks and selection. The reading default is `SpreadMode.Even` with `ZoomMode.FitWidth`: the cover is shown alone and subsequent pages are paired.
+Use EmbedPDF headless 2.14.4 with its PDFium engine and a PDFie-owned React reader shell. The enabled plugins are document manager, viewport, vertical virtual scroll, two-page spread, render/tiling, zoom, interaction/pan, rotation, search, bookmarks and selection. The reading default is `SpreadMode.Even` with `ZoomMode.FitWidth`: the cover is shown alone and subsequent pages are paired. PDFie owns a contextual search rail that groups result excerpts by page and combines EmbedPDF's active-result state with explicit coordinate scrolling; page thumbnails are intentionally omitted because they provide little navigation value for text-dense academic documents.
 
 ## Why
 
