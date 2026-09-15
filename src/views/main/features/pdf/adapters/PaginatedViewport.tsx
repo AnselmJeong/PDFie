@@ -7,7 +7,7 @@ import {
 } from "@embedpdf/plugin-viewport/react"
 import { useZoomPlugin } from "@embedpdf/plugin-zoom/react"
 import { type ReactNode, useLayoutEffect, useRef, useState } from "react"
-import { calculateFitZoom, type FitMode } from "./fit-zoom"
+import { calculateFitZoom, type FitMode, resolveViewportZoom } from "./fit-zoom"
 
 /**
  * Present one spread, while translating local scroll offsets into the SDK's
@@ -127,20 +127,32 @@ export function PaginatedViewport({
         viewportPlugin.setViewportScrollMetrics(documentId, metrics)
       }
     }
-    const applyFit = () => {
-      if (!fitMode || !zoomPlugin) return
-      const target = calculateFitZoom(
-        fitMode,
-        item,
-        { width: container.clientWidth, height: container.clientHeight },
-        gap,
-      )
+    const applyZoom = () => {
+      if (!zoomPlugin || !container.clientWidth || !container.clientHeight) return
       const zoom = zoomPlugin.provides().forDocument(documentId)
-      if (target === null || Math.abs(target - zoom.getState().currentZoomLevel) < 0.001) return
+      const zoomState = zoom.getState()
+      const initializing = viewportPlugin.provides().forDocument(documentId).hasGate("zoom")
+      // Numeric defaults do not initialize the SDK's zoom plugin automatically.
+      // Apply the saved level once the viewport is measured, even at 100%, so
+      // the zoom plugin releases its render gate through its normal request API.
+      const target = resolveViewportZoom({
+        fitZoom: fitMode
+          ? calculateFitZoom(
+              fitMode,
+              item,
+              { width: container.clientWidth, height: container.clientHeight },
+              gap,
+            )
+          : null,
+        savedZoom: typeof zoomState.zoomLevel === "number" ? zoomState.zoomLevel : null,
+        currentZoom: zoomState.currentZoomLevel,
+        initializing,
+      })
+      if (target === null) return
       applyingFit.current = true
       try {
         zoom.requestZoom(target)
-        // Fit modes start at the top and left of the visible spread. Its
+        // Initial and fit zoom start at the top and left of the visible spread. Its
         // centering margins are added by the viewport, not the document layout.
         const centerY = Math.max(0, (container.clientHeight - gap * 2 - item.height * target) / 2)
         const centerX = Math.max(0, (container.clientWidth - gap * 2 - item.width * target) / 2)
@@ -159,10 +171,10 @@ export function PaginatedViewport({
     container.addEventListener("scroll", report)
     const observer = new ResizeObserver(() => {
       report()
-      applyFit()
+      applyZoom()
     })
     observer.observe(container)
-    applyFit()
+    applyZoom()
     return () => {
       reportRef.current = () => {}
       container.removeEventListener("scroll", report)

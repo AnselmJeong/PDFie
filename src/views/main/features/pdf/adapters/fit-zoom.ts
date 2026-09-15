@@ -1,5 +1,22 @@
 export type FitMode = "fit-page" | "fit-width"
 
+/** A gated zoom must be requested even when its value already matches 100%. */
+export function resolveViewportZoom({
+  fitZoom,
+  savedZoom,
+  currentZoom,
+  initializing,
+}: {
+  fitZoom: number | null
+  savedZoom: number | null
+  currentZoom: number
+  initializing: boolean
+}): number | null {
+  const target = fitZoom ?? (initializing ? savedZoom : null)
+  if (target === null || (!initializing && Math.abs(target - currentZoom) < 0.001)) return null
+  return target
+}
+
 export function calculateFitZoom(
   mode: FitMode,
   page: { width: number; height: number },

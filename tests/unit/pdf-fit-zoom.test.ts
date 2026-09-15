@@ -1,5 +1,30 @@
 import { describe, expect, it } from "vitest"
-import { calculateFitZoom } from "../../src/views/main/features/pdf/adapters/fit-zoom"
+import { calculateFitZoom, resolveViewportZoom } from "../../src/views/main/features/pdf/adapters/fit-zoom"
+
+describe("viewport zoom initialization", () => {
+  it.each([0.5, 1, 2.57])("requests saved zoom %s to release the initial render gate", (savedZoom) => {
+    expect(resolveViewportZoom({ fitZoom: null, savedZoom, currentZoom: 1, initializing: true })).toBe(
+      savedZoom,
+    )
+  })
+
+  it("initializes fit mode even when the calculated zoom equals the SDK default", () => {
+    expect(resolveViewportZoom({ fitZoom: 1, savedZoom: 1, currentZoom: 1, initializing: true })).toBe(1)
+  })
+
+  it("does not restore an old saved zoom after manual zoom or viewport resize", () => {
+    expect(
+      resolveViewportZoom({ fitZoom: null, savedZoom: 1, currentZoom: 2, initializing: false }),
+    ).toBeNull()
+  })
+
+  it("only requests subsequent fit zoom when its computed scale changes", () => {
+    expect(resolveViewportZoom({ fitZoom: 1, savedZoom: 1, currentZoom: 1, initializing: false })).toBeNull()
+    expect(resolveViewportZoom({ fitZoom: 1.38, savedZoom: 1, currentZoom: 1, initializing: false })).toBe(
+      1.38,
+    )
+  })
+})
 
 describe("fit zoom for the visible spread", () => {
   const viewport = { width: 880, height: 870 }

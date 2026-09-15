@@ -29,3 +29,13 @@ Verified 2026-09-15 with EmbedPDF 2.14.4.
 - Native WebKit, same window and final page: Fit Page displayed 100%; Fit Width displayed 138% and expanded the content to the viewport width.
 - Chromium: the same transition was 135% to 179%; closing the navigation panel recomputed Fit Width to 216%; manual zoom left fit mode.
 - Added tests for unpaired pages, two-page gutters, equal modes on width-limited layouts and sidebar resizing.
+
+## Saved numeric zoom / blank document regression
+
+- The first stable replacement passed fresh-document fit checks but failed when reopening a document with a saved numeric zoom. EmbedPDF 2.14.4 gates rendering during zoom initialization; its automatic recalculation skips numeric defaults. The custom viewport never issued the request that releases this gate when fit mode was off.
+- Once viewport dimensions are available, request the saved numeric zoom through the zoom API, including when it already equals 100%. Fit initialization also requests an unchanged computed scale while gated. Subsequent manual zoom and resize retain the user's current scale.
+- Reproduced the failure before the fix with a 248-page PDF, page 15, 100%, and 180-degree rotation: metadata and outline loaded but zero page elements mounted. After the fix, the same state mounted both pages and their rendered images.
+- Chromium using the same source and PDFium: verified saved 100% / page 15 / 180 degrees, 257% / page 15 / 90 degrees, and 50% / page 248 / 270 degrees. Each had an open render gate and loaded page images.
+- Added six regression cases for saved zoom initialization, an unchanged 100% fit, manual zoom preservation, and subsequent fit updates. Typecheck, Biome, all 66 Vitest tests, and the Bun source bridge integration passed.
+- Built stable and replaced `/Applications/PDFie.app`. Native WebKit opened the reported original PDF with its latest saved page 24 / 100% / 180 degrees and visibly rendered the content. Quit the installed app, relaunched it, reopened the same PDF, and verified the same saved state rendered again.
+- Installed package verification passed; all seven application payload files matched the newly built stable archive byte-for-byte. The local build remains unsigned and unnotarized.
