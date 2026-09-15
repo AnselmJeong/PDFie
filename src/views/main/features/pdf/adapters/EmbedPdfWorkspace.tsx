@@ -1,5 +1,5 @@
 import type { PluginRegistry } from "@embedpdf/core"
-import { EmbedPDF } from "@embedpdf/core/react"
+import { EmbedPDF, useDocumentState } from "@embedpdf/core/react"
 import { usePdfiumEngine } from "@embedpdf/engines/react"
 import {
   PdfActionType,
@@ -11,19 +11,17 @@ import {
 import { useBookmarkCapability } from "@embedpdf/plugin-bookmark/react"
 import { DocumentContent } from "@embedpdf/plugin-document-manager/react"
 import { PagePointerProvider } from "@embedpdf/plugin-interaction-manager/react"
-import { useRotate } from "@embedpdf/plugin-rotate/react"
-import { Scroller, useScroll } from "@embedpdf/plugin-scroll/react"
+import { Rotate, useRotate } from "@embedpdf/plugin-rotate/react"
+import { type PageLayout, useScroll } from "@embedpdf/plugin-scroll/react"
 import { SearchLayer, useSearch } from "@embedpdf/plugin-search/react"
 import { useSelectionCapability } from "@embedpdf/plugin-selection/react"
 import { SpreadMode, useSpread } from "@embedpdf/plugin-spread/react"
 import { TilingLayer } from "@embedpdf/plugin-tiling/react"
-import { Viewport } from "@embedpdf/plugin-viewport/react"
 import { useZoom, ZoomMode } from "@embedpdf/plugin-zoom/react"
 import {
   ChevronLeft,
   ChevronRight,
   Columns2,
-  FlaskConical,
   ListTree,
   Minus,
   PanelLeftClose,
@@ -43,10 +41,12 @@ import type {
   PdfViewerSource,
 } from "../../../../../shared/pdf/domain"
 import { toPdfSelection } from "../../../../../shared/pdf/selection"
-import { type GoldenSelectionResult, runGoldenSelectionCases } from "../qa/golden-selection-runner"
 import { CleanSelectionLayer } from "./CleanSelectionLayer"
 import { createPdfPlugins } from "./embedpdf-plugins"
 import { collectPdfFastFacts } from "./fast-facts"
+import type { FitMode } from "./fit-zoom"
+import { PaginatedViewport } from "./PaginatedViewport"
+import { clampPage, getPageGroup } from "./page-navigation"
 import { SelectionActions } from "./SelectionActions"
 import { getSelectedTextPreservingVisualHyphens } from "./selection-text"
 import { addOrRestyleHighlight, createHighlightPages } from "./text-highlights"
@@ -227,8 +227,20 @@ function ReaderChrome({
   const [searchQuery, setSearchQuery] = useState("")
   const [selectionMenu, setSelectionMenu] = useState<PdfSelection | null>(null)
   const [highlights, setHighlights] = useState<PdfTextHighlight[]>(initialView.highlights)
-  const [qaResults, setQaResults] = useState<GoldenSelectionResult[] | null>(null)
-  const [qaRunning, setQaRunning] = useState(false)
+  const [fitMode, setFitMode] = useState<FitMode | null>(initialView.zoom > 0 ? null : "fit-page")
+  const clearFitMode = useCallback(() => setFitMode(null), [])
+  const [spreadPage, setSpreadPage] = useState(initialView.currentPage || 1)
+  const documentState = useDocumentState(documentId)
+  const currentPage = clampPage(spreadPage, scrollState.totalPages)
+  const pageGroup = getPageGroup(currentPage, scrollState.totalPages, spreadMode !== SpreadMode.None)
+  const navigatePage = useCallback(
+    (direction: -1 | 1) => {
+      if (!scroll) return
+      const target = direction < 0 ? pageGroup.previous : pageGroup.next
+      if (target) scroll.scrollToPage({ pageNumber: target, behavior: "instant" })
+    },
+    [pageGroup.next, pageGroup.previous, scroll],
+  )
   const restoredViewApplied = useRef(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const searchResultsRef = useRef<HTMLDivElement>(null)
@@ -304,13 +316,13 @@ function ReaderChrome({
 
   useEffect(() => {
     onStatusChange({
-      page: scrollState.currentPage || 1,
+      page: currentPage || 1,
       pageCount: scrollState.totalPages || 0,
       zoom: zoomState.currentZoomLevel || 1,
       rotation,
       phase: "ready",
     })
-  }, [onStatusChange, rotation, scrollState.currentPage, scrollState.totalPages, zoomState.currentZoomLevel])
+  }, [onStatusChange, rotation, currentPage, scrollState.totalPages, zoomState.currentZoomLevel])
 
   const openSearch = useCallback(() => {
     setRailOpen(true)
@@ -382,9 +394,12 @@ function ReaderChrome({
 
   const toggleSpread = useCallback(() => {
     if (!spread || !zoom) return
-    spread.setSpreadMode(spreadMode === SpreadMode.None ? SpreadMode.Even : SpreadMode.None)
-    requestAnimationFrame(() => zoom.requestZoom(ZoomMode.FitWidth))
-  }, [spread, spreadMode, zoom])
+    spread.setSpreadMode(spreadMode === SpreadMode.None ? SpreadMode.Odd : SpreadMode.None)
+    requestAnimationFrame(() => {
+      setFitMode("fit-page")
+      scroll?.scrollToPage({ pageNumber: currentPage, behavior: "instant" })
+    })
+  }, [currentPage, scroll, spread, spreadMode, zoom])
 
   const clearSelection = useCallback(() => {
     selection?.forDocument(documentId).clear()
@@ -437,23 +452,6 @@ function ReaderChrome({
     [selectionMenu],
   )
 
-  const runGoldenQa = useCallback(async () => {
-    if (qaRunning) return
-    setQaRunning(true)
-    try {
-      const results = await runGoldenSelectionCases(registry, documentId, source.fileName)
-      setQaResults(results)
-      const previous = JSON.parse(
-        localStorage.getItem("pdfie.phase0.golden-results") ?? "[]",
-      ) as GoldenSelectionResult[]
-      const merged = new Map(previous.map((result) => [`${result.fixture}:${result.caseId}`, result]))
-      for (const result of results) merged.set(`${result.fixture}:${result.caseId}`, result)
-      localStorage.setItem("pdfie.phase0.golden-results", JSON.stringify([...merged.values()]))
-    } finally {
-      setQaRunning(false)
-    }
-  }, [documentId, qaRunning, registry, source.fileName])
-
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       const mod = event.metaKey || event.ctrlKey
@@ -464,10 +462,6 @@ function ReaderChrome({
       if (mod && event.shiftKey && event.code === "KeyT") {
         event.preventDefault()
         setRailOpen((value) => !value)
-      }
-      if (mod && event.altKey && event.code === "KeyG") {
-        event.preventDefault()
-        void runGoldenQa()
       }
       if (mod && event.key === "=") {
         event.preventDefault()
@@ -491,12 +485,59 @@ function ReaderChrome({
 
       event.preventDefault()
       event.stopPropagation()
-      if (pageDirection < 0) scroll?.scrollToPreviousPage("smooth")
-      else scroll?.scrollToNextPage("smooth")
+      navigatePage(pageDirection)
     }
     window.addEventListener("keydown", keydown, true)
     return () => window.removeEventListener("keydown", keydown, true)
-  }, [clearSelection, closeSearch, openSearch, railMode, runGoldenQa, scroll, selectionMenu, zoom])
+  }, [clearSelection, closeSearch, openSearch, railMode, navigatePage, selectionMenu, zoom])
+
+  const renderPage = (page: PageLayout) => (
+    <div
+      className="pdf-page"
+      style={{ width: page.rotatedWidth, height: page.rotatedHeight }}
+      data-page-number={page.pageNumber}
+    >
+      <Rotate documentId={documentId} pageIndex={page.pageIndex}>
+        <PagePointerProvider
+          documentId={documentId}
+          pageIndex={page.pageIndex}
+          scale={zoomState.currentZoomLevel}
+        >
+          <TilingLayer
+            documentId={documentId}
+            pageIndex={page.pageIndex}
+            scale={zoomState.currentZoomLevel}
+          />
+          <SearchLayer
+            documentId={documentId}
+            pageIndex={page.pageIndex}
+            scale={zoomState.currentZoomLevel}
+          />
+          <CleanSelectionLayer
+            documentId={documentId}
+            pageIndex={page.pageIndex}
+            scale={zoomState.currentZoomLevel}
+            rotation={((documentState?.document?.pages[page.pageIndex]?.rotation ?? 0) + rotation) % 4}
+            highlights={highlights}
+            selectionMenu={
+              selectionMenu
+                ? (props) => (
+                    <SelectionActions
+                      {...props}
+                      key={selectionKey}
+                      onAskAI={askAboutSelection}
+                      onSummarize={summarizeSelection}
+                      onHighlight={highlightSelection}
+                      onCopy={copySelection}
+                    />
+                  )
+                : undefined
+            }
+          />
+        </PagePointerProvider>
+      </Rotate>
+    </div>
+  )
 
   return (
     <section className="reader-shell" aria-label={`PDF reader: ${source.fileName}`}>
@@ -521,25 +562,25 @@ function ReaderChrome({
         <div className="toolbar-group page-controls">
           <IconButton
             label="이전 페이지"
-            onClick={() => scroll?.scrollToPreviousPage("smooth")}
-            disabled={scrollState.currentPage <= 1}
+            onClick={() => navigatePage(-1)}
+            disabled={pageGroup.previous === null}
           >
             <ChevronLeft size={16} />
           </IconButton>
           <label className="page-input">
             <span className="sr-only">현재 페이지</span>
             <input
-              value={scrollState.currentPage || 1}
+              value={currentPage || 1}
               inputMode="numeric"
-              onChange={(event) => scroll?.scrollToPage({ pageNumber: Number(event.target.value) || 1 })}
+              onChange={(event) =>
+                scroll?.scrollToPage({
+                  pageNumber: clampPage(Number(event.target.value), scrollState.totalPages),
+                })
+              }
             />
             <span>/ {scrollState.totalPages || "—"}</span>
           </label>
-          <IconButton
-            label="다음 페이지"
-            onClick={() => scroll?.scrollToNextPage("smooth")}
-            disabled={scrollState.currentPage >= scrollState.totalPages}
-          >
+          <IconButton label="다음 페이지" onClick={() => navigatePage(1)} disabled={pageGroup.next === null}>
             <ChevronRight size={16} />
           </IconButton>
         </div>
@@ -554,9 +595,39 @@ function ReaderChrome({
           <IconButton label="축소" onClick={() => zoom?.zoomOut()}>
             <Minus size={16} />
           </IconButton>
-          <button className="zoom-value" type="button" onClick={() => zoom?.requestZoom(ZoomMode.FitWidth)}>
-            {Math.round((zoomState.currentZoomLevel || 1) * 100)}%
-          </button>
+          <select
+            className="zoom-value"
+            aria-label="확대/축소 배율"
+            value={fitMode ?? String(zoomState.currentZoomLevel)}
+            onChange={(event) => {
+              const value = event.target.value
+              if (value === ZoomMode.FitPage || value === ZoomMode.FitWidth) setFitMode(value)
+              else {
+                setFitMode(null)
+                zoom?.requestZoom(Number(value))
+              }
+            }}
+          >
+            <option value={ZoomMode.FitPage}>
+              페이지 맞춤 (Fit Page)
+              {fitMode === "fit-page" ? ` · ${Math.round(zoomState.currentZoomLevel * 100)}%` : ""}
+            </option>
+            <option value={ZoomMode.FitWidth}>
+              너비 맞춤 (Fit Width)
+              {fitMode === "fit-width" ? ` · ${Math.round(zoomState.currentZoomLevel * 100)}%` : ""}
+            </option>
+            {!fitMode &&
+              ![0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 5].includes(zoomState.currentZoomLevel) && (
+                <option value={zoomState.currentZoomLevel}>
+                  {Math.round(zoomState.currentZoomLevel * 100)}%
+                </option>
+              )}
+            {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 5].map((level) => (
+              <option key={level} value={level}>
+                {level * 100}%
+              </option>
+            ))}
+          </select>
           <IconButton label="확대" onClick={() => zoom?.zoomIn()}>
             <ZoomIn size={16} />
           </IconButton>
@@ -565,9 +636,6 @@ function ReaderChrome({
           </IconButton>
           <IconButton label="문서 검색" onClick={openSearch}>
             <Search size={16} />
-          </IconButton>
-          <IconButton label="Selection golden QA" onClick={() => void runGoldenQa()}>
-            <FlaskConical size={15} />
           </IconButton>
           <IconButton label="문서 닫기" onClick={onClose}>
             <X size={16} />
@@ -690,94 +758,14 @@ function ReaderChrome({
         )}
 
         <main className="pdf-surface">
-          <Viewport documentId={documentId} className="pdf-viewport">
-            <Scroller
-              documentId={documentId}
-              className="pdf-scroller"
-              renderPage={(page) => (
-                <div
-                  className="pdf-page"
-                  style={{ width: page.rotatedWidth, height: page.rotatedHeight }}
-                  data-page-number={page.pageNumber}
-                >
-                  <PagePointerProvider
-                    documentId={documentId}
-                    pageIndex={page.pageIndex}
-                    rotation={rotation}
-                    scale={zoomState.currentZoomLevel}
-                  >
-                    <TilingLayer
-                      documentId={documentId}
-                      pageIndex={page.pageIndex}
-                      scale={zoomState.currentZoomLevel}
-                    />
-                    <SearchLayer
-                      documentId={documentId}
-                      pageIndex={page.pageIndex}
-                      scale={zoomState.currentZoomLevel}
-                    />
-                    <CleanSelectionLayer
-                      documentId={documentId}
-                      pageIndex={page.pageIndex}
-                      scale={zoomState.currentZoomLevel}
-                      rotation={rotation}
-                      highlights={highlights}
-                      selectionMenu={
-                        selectionMenu
-                          ? (props) => (
-                              <SelectionActions
-                                {...props}
-                                key={selectionKey}
-                                onAskAI={askAboutSelection}
-                                onSummarize={summarizeSelection}
-                                onHighlight={highlightSelection}
-                                onCopy={copySelection}
-                              />
-                            )
-                          : undefined
-                      }
-                    />
-                  </PagePointerProvider>
-                </div>
-              )}
-            />
-          </Viewport>
-
-          {(qaRunning || qaResults) && (
-            <aside className="qa-results" aria-live="polite">
-              <div>
-                <strong>Selection golden QA</strong>
-                <span>
-                  {qaRunning
-                    ? "실행 중…"
-                    : `${qaResults?.filter((result) => result.passed).length ?? 0}/${qaResults?.length ?? 0} 통과`}
-                </span>
-              </div>
-              {qaResults && (
-                <ul>
-                  {qaResults.map((result) => (
-                    <li key={result.caseId} data-passed={result.passed}>
-                      {result.passed ? "PASS" : "FAIL"} · {result.caseId}
-                      {result.error ? ` · ${result.error}` : ""}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <div className="qa-actions">
-                <button
-                  type="button"
-                  onClick={() =>
-                    navigator.clipboard.writeText(localStorage.getItem("pdfie.phase0.golden-results") ?? "[]")
-                  }
-                >
-                  누적 결과 복사
-                </button>
-                <button type="button" onClick={() => setQaResults(null)}>
-                  닫기
-                </button>
-              </div>
-            </aside>
-          )}
+          <PaginatedViewport
+            documentId={documentId}
+            initialPage={spreadPage}
+            fitMode={fitMode}
+            onManualZoom={clearFitMode}
+            onPageChange={setSpreadPage}
+            renderPage={renderPage}
+          />
         </main>
       </div>
     </section>

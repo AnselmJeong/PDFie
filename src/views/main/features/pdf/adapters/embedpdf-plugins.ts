@@ -11,7 +11,7 @@ import { SelectionPluginPackage } from "@embedpdf/plugin-selection/react"
 import { SpreadMode, SpreadPluginPackage } from "@embedpdf/plugin-spread/react"
 import { TilingPluginPackage } from "@embedpdf/plugin-tiling/react"
 import { ViewportPluginPackage } from "@embedpdf/plugin-viewport/react"
-import { ZoomMode, ZoomPluginPackage } from "@embedpdf/plugin-zoom/react"
+import { ZoomPluginPackage } from "@embedpdf/plugin-zoom/react"
 import type { PdfViewerSource } from "../../../../../shared/pdf/domain"
 
 export function createPdfPlugins(
@@ -33,7 +33,7 @@ export function createPdfPlugins(
     }),
     createPluginRegistration(ViewportPluginPackage, { viewportGap: 16 }),
     createPluginRegistration(SpreadPluginPackage, {
-      defaultSpreadMode: SpreadMode.Even,
+      defaultSpreadMode: SpreadMode.Odd,
     }),
     createPluginRegistration(ScrollPluginPackage, {
       defaultStrategy: ScrollStrategy.Vertical,
@@ -50,7 +50,7 @@ export function createPdfPlugins(
       extraRings: 1,
     }),
     createPluginRegistration(ZoomPluginPackage, {
-      defaultZoomLevel: initialView.zoom > 0 ? initialView.zoom : ZoomMode.FitWidth,
+      defaultZoomLevel: initialView.zoom > 0 ? initialView.zoom : 1,
       minZoom: 0.25,
       maxZoom: 5,
       zoomStep: 0.1,
