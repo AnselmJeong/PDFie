@@ -1,9 +1,8 @@
-import type { Rect, Rotation } from "@embedpdf/models"
-import type { SelectionMenuPlacement } from "@embedpdf/plugin-selection"
-import { type SelectionSelectionMenuRenderFn, useSelectionPlugin } from "@embedpdf/plugin-selection/react"
-import { CounterRotate } from "@embedpdf/utils/react"
+import type { Rect } from "@embedpdf/models"
+import { useSelectionPlugin } from "@embedpdf/plugin-selection/react"
 import { useEffect, useMemo, useState } from "react"
 import type { PdfTextHighlight } from "../../../../../shared/pdf/domain"
+import { SelectionMenuAnchor, type SelectionMenuRenderer } from "./SelectionMenuAnchor"
 import { createPreciseSelectionHighlightRects, selectionHighlightRectsOverlap } from "./selection-highlight"
 
 export function CleanSelectionLayer({
@@ -17,13 +16,12 @@ export function CleanSelectionLayer({
   documentId: string
   pageIndex: number
   scale: number
-  rotation: Rotation
+  rotation: number
   highlights: PdfTextHighlight[]
-  selectionMenu?: SelectionSelectionMenuRenderFn
+  selectionMenu?: SelectionMenuRenderer
 }) {
   const { plugin } = useSelectionPlugin()
   const [rects, setRects] = useState<Rect[]>([])
-  const [placement, setPlacement] = useState<SelectionMenuPlacement | null>(null)
 
   useEffect(() => {
     if (!plugin) return
@@ -42,11 +40,6 @@ export function CleanSelectionLayer({
       },
     })
   }, [documentId, pageIndex, plugin])
-
-  useEffect(() => {
-    if (!plugin) return
-    return plugin.onMenuPlacement(documentId, setPlacement)
-  }, [documentId, plugin])
 
   const savedHighlights = useMemo(
     () =>
@@ -98,29 +91,10 @@ export function CleanSelectionLayer({
           />
         ))}
       </div>
-      {selectionMenu && placement?.pageIndex === pageIndex && placement.isVisible && (
-        <CounterRotate
-          rect={{
-            origin: {
-              x: placement.rect.origin.x * scale,
-              y: placement.rect.origin.y * scale,
-            },
-            size: {
-              width: placement.rect.size.width * scale,
-              height: placement.rect.size.height * scale,
-            },
-          }}
-          rotation={rotation}
-        >
-          {(props) =>
-            selectionMenu({
-              ...props,
-              context: { type: "selection", pageIndex },
-              selected: true,
-              placement,
-            })
-          }
-        </CounterRotate>
+      {selectionMenu && rects.length > 0 && (
+        <SelectionMenuAnchor rects={rects} scale={scale} rotation={rotation}>
+          {selectionMenu}
+        </SelectionMenuAnchor>
       )}
     </>
   )

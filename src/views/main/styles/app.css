@@ -372,7 +372,7 @@ textarea:focus-visible {
 }
 .rail-tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   padding: 8px 9px 7px;
   border-bottom: 1px solid var(--hairline);
 }
@@ -1409,4 +1409,87 @@ textarea:focus-visible {
     animation-iteration-count: 1;
     transition-duration: 0.01ms;
   }
+}
+
+/* Selection actions live above the paginated/rotated page clipping contexts. */
+.selection-menu-portal {
+  position: fixed;
+  z-index: 1000;
+  max-width: calc(100vw - 16px);
+  border-radius: 9px;
+  background: #2a2723;
+  color: #f7f4ee;
+  box-shadow: 0 8px 30px #16120e40;
+}
+.selection-menu-portal .selection-popup {
+  position: relative;
+  transform: none;
+  flex-wrap: wrap;
+  white-space: normal;
+  animation: none;
+}
+.selection-menu-portal .selection-popup::after {
+  display: none;
+}
+.selection-menu-portal .selection-highlight-palette {
+  position: static;
+  transform: none;
+  margin: 3px;
+}
+.selection-note-editor {
+  padding: 10px;
+}
+.selection-note-editor textarea {
+  display: block;
+  width: 100%;
+  margin: 8px 0;
+  resize: vertical;
+}
+.selection-note-editor button {
+  padding: 5px 12px;
+}
+.ai-sidebar-container {
+  display: flex;
+  min-height: 0;
+}
+.ai-sidebar-container[hidden] {
+  display: none;
+}
+.reader-action-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 14px;
+  background: var(--surface);
+  font-size: 12px;
+}
+.reader-action-status button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.highlights-panel {
+  overflow: auto;
+  padding: 12px;
+  font-size: 12px;
+}
+.highlights-panel article {
+  border-bottom: 1px solid var(--hairline);
+  padding: 12px 0;
+}
+.highlights-panel blockquote {
+  margin: 8px 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.highlights-panel textarea {
+  width: 100%;
+  margin: 8px 0;
+  resize: vertical;
+}
+.highlights-panel select {
+  width: 100%;
+}
+.highlight-location {
+  text-align: left;
 }

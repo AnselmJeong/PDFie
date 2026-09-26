@@ -27,6 +27,7 @@ const defaultState = (): PersistedDocumentState => ({
 })
 
 export class DocumentStateRepository {
+  #pendingWrite: Promise<void> = Promise.resolve()
   readonly #records = new Map<string, PersistedDocumentState>()
 
   private constructor(readonly path: string) {}
@@ -61,9 +62,17 @@ export class DocumentStateRepository {
       ...patch,
       updatedAt: new Date().toISOString(),
     })
-    await mkdir(dirname(this.path), { recursive: true })
-    const temporary = `${this.path}.${crypto.randomUUID()}.tmp`
-    await Bun.write(temporary, JSON.stringify(Object.fromEntries(this.#records), null, 2))
-    await rename(temporary, this.path)
+    // Serialize atomic replacements: a slower page-position save must never
+    // overwrite a newer annotation save after both have returned successfully.
+    const write = this.#pendingWrite
+      .catch(() => undefined)
+      .then(async () => {
+        await mkdir(dirname(this.path), { recursive: true })
+        const temporary = `${this.path}.${crypto.randomUUID()}.tmp`
+        await Bun.write(temporary, JSON.stringify(Object.fromEntries(this.#records), null, 2))
+        await rename(temporary, this.path)
+      })
+    this.#pendingWrite = write
+    await write
   }
 }

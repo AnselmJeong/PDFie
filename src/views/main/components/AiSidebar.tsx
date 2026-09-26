@@ -1,6 +1,6 @@
 import { Copy, PanelRightClose, RefreshCw, Send, Settings2, Sparkles, Square } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import type { PdfSelection } from "../../../shared/pdf/domain"
+import type { PdfSelection, SelectionAiRequest } from "../../../shared/pdf/domain"
 import { rpc } from "../rpc"
 
 interface AiStatus {
@@ -27,11 +27,15 @@ const quickActions = [
 
 export function AiSidebar({
   selection,
+  request,
+  visible,
   activePage,
   documentTitle,
   onClose,
 }: {
   selection: PdfSelection | null
+  request: SelectionAiRequest | null
+  visible: boolean
   activePage: number
   documentTitle: string
   onClose: () => void
@@ -42,6 +46,11 @@ export function AiSidebar({
   const [loadingModels, setLoadingModels] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [apiKeyDraft, setApiKeyDraft] = useState("")
+  const [quotedSelection, setQuotedSelection] = useState<PdfSelection | null>(null)
+  const [quoteDismissed, setQuoteDismissed] = useState(false)
+  const handledRequest = useRef<string | null>(null)
+  const requestInFlight = useRef<string | null>(null)
+  const effectiveSelection = quoteDismissed ? null : (quotedSelection ?? selection)
   const [question, setQuestion] = useState("")
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [activeRequestId, setActiveRequestId] = useState<string | null>(null)
@@ -118,12 +127,14 @@ export function AiSidebar({
   }, [activeRequestId, stopStreaming])
 
   const send = useCallback(
-    async (rawQuestion: string) => {
+    async (rawQuestion: string, selected: PdfSelection | null = effectiveSelection) => {
       const value = rawQuestion.trim()
       const model = status?.selectedModel ?? ""
-      if (!value || !model || activeRequestId) return
+      if (!value || !model || requestInFlight.current) return
+      requestInFlight.current = "starting"
       const requestId = crypto.randomUUID()
-      const quotedText = selection?.text
+      requestInFlight.current = requestId
+      const quotedText = selected?.text
       setChatError(null)
       setQuestion("")
       setActiveRequestId(requestId)
@@ -138,20 +149,21 @@ export function AiSidebar({
           model,
           question: value,
           activePage,
-          selection: selection
-            ? { text: selection.text, pages: selection.pages.map((page) => page.pageNumber) }
+          selection: selected
+            ? { text: selected.text, pages: selected.pages.map((page) => page.pageNumber) }
             : null,
         })
       } catch (cause) {
         setChatError(cause instanceof Error ? cause.message : "AI 응답을 받지 못했습니다.")
       } finally {
+        requestInFlight.current = null
         setActiveRequestId(null)
         setMessages((current) =>
           current.map((message) => (message.id === requestId ? { ...message, streaming: false } : message)),
         )
       }
     },
-    [activePage, activeRequestId, selection, status?.selectedModel],
+    [activePage, effectiveSelection, status?.selectedModel],
   )
 
   const saveApiKey = useCallback(async () => {
@@ -162,18 +174,41 @@ export function AiSidebar({
   }, [apiKeyDraft, loadModels])
 
   useEffect(() => {
-    const submit = (event: Event) => {
-      void send((event as CustomEvent<string>).detail)
+    if (!request || !status || handledRequest.current === request.id) return
+    handledRequest.current = request.id
+    setQuotedSelection(request.selection)
+    setQuoteDismissed(false)
+    setQuestion(request.prompt ?? "")
+    if (request.prompt && status.selectedModel && status.hasApiKey && !requestInFlight.current) {
+      void send(request.prompt, request.selection)
+    } else if (request.prompt) {
+      setChatError(
+        requestInFlight.current
+          ? "응답이 끝나면 준비된 요약 질문을 보내세요."
+          : "AI 설정을 완료한 뒤 준비된 질문을 보내세요.",
+      )
     }
-    window.addEventListener("pdfie:ai-submit", submit)
-    return () => window.removeEventListener("pdfie:ai-submit", submit)
-  }, [send])
+    composerRef.current?.focus()
+  }, [request, status, send])
 
   useEffect(() => {
-    const focusComposer = () => composerRef.current?.focus()
-    window.addEventListener("pdfie:ai-focus", focusComposer)
-    return () => window.removeEventListener("pdfie:ai-focus", focusComposer)
-  }, [])
+    if (visible) composerRef.current?.focus()
+  }, [visible])
+
+  useEffect(
+    () => () => {
+      const requestId = requestInFlight.current
+      if (requestId && requestId !== "starting") void rpc.request["ai.stop"]({ requestId })
+    },
+    [],
+  )
+
+  useEffect(() => {
+    if (selection) {
+      setQuoteDismissed(false)
+      setQuotedSelection(null)
+    }
+  }, [selection])
 
   const beginResize = (event: React.PointerEvent<HTMLDivElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -193,7 +228,7 @@ export function AiSidebar({
     window.addEventListener("pointerup", end, { once: true })
   }
 
-  const selectedPages = selection?.pages.map((page) => page.pageNumber).join("–")
+  const selectedPages = effectiveSelection?.pages.map((page) => page.pageNumber).join("–")
   const disabled = !status?.selectedModel || Boolean(activeRequestId)
 
   return (
@@ -306,13 +341,22 @@ export function AiSidebar({
       )}
 
       <div className="chat-messages" aria-live="polite">
-        {selection && (
+        {effectiveSelection && (
           <div className="selected-context">
             <div>
               <i />
               <span>Selected context · p. {selectedPages}</span>
             </div>
-            <blockquote>{selection.text}</blockquote>
+            <blockquote>{effectiveSelection.text}</blockquote>
+            <button
+              type="button"
+              onClick={() => {
+                setQuotedSelection(null)
+                setQuoteDismissed(true)
+              }}
+            >
+              인용 해제
+            </button>
           </div>
         )}
         {!messages.length && (
@@ -369,7 +413,7 @@ export function AiSidebar({
           <button
             type="button"
             key={action.label}
-            disabled={disabled || !selection}
+            disabled={disabled || !effectiveSelection}
             onClick={() => void send(action.prompt)}
           >
             <Sparkles size={12} /> {action.label}
@@ -388,14 +432,13 @@ export function AiSidebar({
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
+            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
               event.preventDefault()
               void send(question)
             }
           }}
           rows={1}
           placeholder={status?.selectedModel ? "문서에 관해 질문하세요…" : "Ollama Cloud model을 설정하세요…"}
-          disabled={!status?.selectedModel}
         />
         {activeRequestId ? (
           <button type="button" onClick={() => void stopStreaming()} aria-label="응답 중지">

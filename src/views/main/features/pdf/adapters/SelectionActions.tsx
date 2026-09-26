@@ -1,9 +1,9 @@
-import type { SelectionSelectionMenuProps } from "@embedpdf/plugin-selection/react"
-import { Copy, Highlighter, List, Sparkles } from "lucide-react"
-import { useState } from "react"
+import { Copy, Headphones, Highlighter, List, MessageSquarePlus, Sparkles, Trash2, X } from "lucide-react"
+import { useLayoutEffect, useRef, useState } from "react"
 import type { PdfHighlightStyle } from "../../../../../shared/pdf/domain"
+import { selectionMenuPosition } from "./selection-menu-position"
 
-const highlightChoices: Array<{
+export const highlightChoices: Array<{
   style: PdfHighlightStyle
   label: string
   color: string
@@ -16,7 +16,14 @@ const highlightChoices: Array<{
   { style: "red-underline", label: "빨간색 밑줄", color: "#d9473f", underline: true },
 ]
 
-type SelectionActionsProps = SelectionSelectionMenuProps & {
+type SelectionActionsProps = {
+  anchor: DOMRect
+  existingNote?: string
+  hasHighlight: boolean
+  onNote: (note: string) => void
+  onRead: () => void
+  onRemoveHighlight: () => void
+  onClose: () => void
   onAskAI: () => void
   onSummarize: () => void
   onHighlight: (style: PdfHighlightStyle) => void
@@ -24,9 +31,13 @@ type SelectionActionsProps = SelectionSelectionMenuProps & {
 }
 
 export function SelectionActions({
-  rect,
-  menuWrapperProps,
-  placement,
+  anchor,
+  existingNote,
+  hasHighlight,
+  onNote,
+  onRead,
+  onRemoveHighlight,
+  onClose,
   onAskAI,
   onSummarize,
   onHighlight,
@@ -34,18 +45,48 @@ export function SelectionActions({
 }: SelectionActionsProps) {
   const [showHighlightChoices, setShowHighlightChoices] = useState(false)
 
-  const placeAbove = (placement.spaceAbove ?? 0) >= 54
-  const menuTop = placeAbove ? -54 : rect.size.height + 10
+  const [editingNote, setEditingNote] = useState(false)
+  const [note, setNote] = useState(existingNote ?? "")
+  const menuRef = useRef<HTMLDivElement>(null)
+  const [position, setPosition] = useState({ left: 8, top: 8 })
+  useLayoutEffect(() => {
+    const element = menuRef.current
+    if (!element) return
+    const measure = () =>
+      setPosition(
+        selectionMenuPosition(
+          anchor,
+          { width: element.offsetWidth, height: element.offsetHeight },
+          { width: window.innerWidth, height: window.innerHeight },
+        ),
+      )
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [anchor])
   const iconSize = 16
 
   return (
-    <div {...menuWrapperProps} data-selection-menu="true" style={{ ...menuWrapperProps.style, zIndex: 50 }}>
+    <div
+      role="dialog"
+      aria-label="선택한 텍스트 작업"
+      ref={menuRef}
+      className="selection-menu-portal"
+      data-selection-menu="true"
+      style={position}
+      onPointerDown={(event) => event.stopPropagation()}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.stopPropagation()
+          onClose()
+        }
+      }}
+    >
       <div
         className="selection-popup"
-        data-placement={placeAbove ? "top" : "bottom"}
         role="toolbar"
         aria-label="선택한 텍스트 작업"
-        style={{ top: menuTop, left: rect.size.width / 2 }}
         onMouseDown={(event) => event.preventDefault()}
       >
         <button className="selection-popup-primary" type="button" onClick={onAskAI}>
@@ -98,7 +139,48 @@ export function SelectionActions({
           <Copy size={iconSize} aria-hidden="true" />
           <span>Copy</span>
         </button>
+        <button type="button" onClick={onRead}>
+          <Headphones size={iconSize} />
+          Read
+        </button>
+        <button type="button" onClick={() => setEditingNote((value) => !value)} aria-expanded={editingNote}>
+          <MessageSquarePlus size={iconSize} />
+          주석
+        </button>
+        {hasHighlight && (
+          <button
+            type="button"
+            onClick={onRemoveHighlight}
+            title="선택한 하이라이트와 주석 삭제"
+            aria-label="선택한 하이라이트와 주석 삭제"
+          >
+            <Trash2 size={iconSize} />
+          </button>
+        )}
+        <button type="button" onClick={onClose} aria-label="선택 메뉴 닫기">
+          <X size={iconSize} />
+        </button>
       </div>
+      {editingNote && (
+        <form
+          className="selection-note-editor"
+          onSubmit={(event) => {
+            event.preventDefault()
+            onNote(note)
+          }}
+        >
+          <label>
+            선택한 구절에 주석
+            <textarea
+              aria-label="선택한 구절에 주석"
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              rows={3}
+            />
+          </label>
+          <button type="submit">주석 저장</button>
+        </form>
+      )}
     </div>
   )
 }

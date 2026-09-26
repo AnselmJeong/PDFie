@@ -63,11 +63,10 @@ export function createPdfPlugins(
     createPluginRegistration(SelectionPluginPackage, {
       minSelectionDragDistance: 2,
       maxCachedGeometries: 60,
-      // EmbedPDF's default expands every glyph hit box by the average glyph
-      // height. At book-sized zoom levels that can snap the drag endpoint to a
-      // neighbouring character or word. Require the PDFium tight glyph box so
-      // the selected range follows the character under the pointer.
-      toleranceFactor: 0,
+      // Allow a small gap around glyph ink, including spaces/letter counters.
+      // The SDK default (1.5) can reach adjacent lines; zero makes ordinary
+      // drags appear broken unless both endpoints land precisely on glyphs.
+      toleranceFactor: 0.25,
       marquee: { enabled: false },
     }),
   ]

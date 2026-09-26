@@ -62,6 +62,7 @@ export function addOrRestyleHighlight(
     (highlight) => selectionKey(normalizeSelectionText(highlight.text), highlight.pages) === key,
   )
   const next: PdfTextHighlight = {
+    ...existing,
     id: existing?.id ?? createId(),
     text: selection.text,
     style,
@@ -72,4 +73,15 @@ export function addOrRestyleHighlight(
   return existing
     ? highlights.map((highlight) => (highlight.id === existing.id ? next : highlight))
     : [...highlights, next]
+}
+
+export function findSelectionHighlight(
+  highlights: readonly PdfTextHighlight[],
+  selection: PdfSelection,
+  pages: PdfSelectionPage[],
+) {
+  const key = selectionKey(selection.normalizedText, pages)
+  return highlights.find(
+    (highlight) => selectionKey(normalizeSelectionText(highlight.text), highlight.pages) === key,
+  )
 }

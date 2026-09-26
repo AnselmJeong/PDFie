@@ -3,6 +3,7 @@ import type { PdfSelection } from "../../src/shared/pdf/domain"
 import {
   addOrRestyleHighlight,
   createHighlightPages,
+  findSelectionHighlight,
 } from "../../src/views/main/features/pdf/adapters/text-highlights"
 
 const selection: PdfSelection = {
@@ -55,5 +56,17 @@ describe("PDF text highlights", () => {
       style: "pink",
       createdAt: "2026-08-05T00:00:00.000Z",
     })
+  })
+  it("preserves a passage note when restyling, and identifies it only at its own location", () => {
+    const pages = createHighlightPages(selection, { geometry: {}, slices: {} })
+    const created = addOrRestyleHighlight([], selection, pages, "yellow", () => "note-1")
+    const first = created[0]
+    const firstPage = pages[0]
+    if (!first || !firstPage) throw new Error("Expected a persisted highlight")
+    first.note = "Follow up this argument"
+    const restyled = addOrRestyleHighlight(created, selection, pages, "red-underline")
+    expect(findSelectionHighlight(restyled, selection, pages)?.note).toBe("Follow up this argument")
+    expect(findSelectionHighlight(restyled, selection, [{ ...firstPage, pageNumber: 3 }])).toBeUndefined()
+    expect(restyled[0]?.id).toBe("note-1")
   })
 })

@@ -22,12 +22,14 @@ import {
   ChevronLeft,
   ChevronRight,
   Columns2,
+  Highlighter,
   ListTree,
   Minus,
   PanelLeftClose,
   PanelLeftOpen,
   RotateCw,
   Search,
+  Square,
   X,
   ZoomIn,
 } from "lucide-react"
@@ -39,17 +41,20 @@ import type {
   PdfSelection,
   PdfTextHighlight,
   PdfViewerSource,
+  SelectionAiRequest,
 } from "../../../../../shared/pdf/domain"
 import { toPdfSelection } from "../../../../../shared/pdf/selection"
 import { CleanSelectionLayer } from "./CleanSelectionLayer"
 import { createPdfPlugins } from "./embedpdf-plugins"
 import { collectPdfFastFacts } from "./fast-facts"
 import type { FitMode } from "./fit-zoom"
+import { HighlightsPanel } from "./HighlightsPanel"
 import { PaginatedViewport } from "./PaginatedViewport"
 import { clampPage, getPageGroup } from "./page-navigation"
 import { SelectionActions } from "./SelectionActions"
 import { getSelectedTextPreservingVisualHyphens } from "./selection-text"
-import { addOrRestyleHighlight, createHighlightPages } from "./text-highlights"
+import { addOrRestyleHighlight, createHighlightPages, findSelectionHighlight } from "./text-highlights"
+import { useSelectionSpeech } from "./useSelectionSpeech"
 
 interface EmbedPdfWorkspaceProps {
   source: PdfViewerSource
@@ -61,6 +66,7 @@ interface EmbedPdfWorkspaceProps {
   }
   onClose: () => void
   onSelectionChange: (selection: PdfSelection | null) => void
+  onSelectionAiRequest: (request: SelectionAiRequest) => void
   onHighlightsChange: (highlights: PdfTextHighlight[]) => void
   onStatusChange: (status: ReaderStatus) => void
   onClassificationChange: (classification: ClassificationResult) => void
@@ -209,6 +215,7 @@ function ReaderChrome({
   initialView,
   onClose,
   onSelectionChange,
+  onSelectionAiRequest,
   onHighlightsChange,
   onStatusChange,
   onClassificationChange,
@@ -221,11 +228,15 @@ function ReaderChrome({
   const { provides: selection } = useSelectionCapability()
   const { provides: bookmark } = useBookmarkCapability()
   const [railOpen, setRailOpen] = useState(true)
-  const [railMode, setRailMode] = useState<"search" | "outline">("outline")
+  const [railMode, setRailMode] = useState<"search" | "outline" | "highlights">("outline")
   const [outline, setOutline] = useState<PdfOutlineNode[]>([])
   const [outlineLoaded, setOutlineLoaded] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectionMenu, setSelectionMenu] = useState<PdfSelection | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const speech = useSelectionSpeech(setActionError)
+  const selectionRevision = useRef(0)
+  const [previousHighlights, setPreviousHighlights] = useState<PdfTextHighlight[] | null>(null)
   const [highlights, setHighlights] = useState<PdfTextHighlight[]>(initialView.highlights)
   const [fitMode, setFitMode] = useState<FitMode | null>(initialView.zoom > 0 ? null : "fit-page")
   const clearFitMode = useCallback(() => setFitMode(null), [])
@@ -293,22 +304,37 @@ function ReaderChrome({
   useEffect(() => {
     if (!selection) return
     const scope = selection.forDocument(documentId)
+    const invalidate = () => {
+      selectionRevision.current += 1
+      setSelectionMenu(null)
+      onSelectionChange(null)
+    }
+    const stopBegin = scope.onBeginSelection(invalidate)
     const stopEndSelection = scope.onEndSelection(async () => {
+      const revision = ++selectionRevision.current
+      const formatted = scope.getFormattedSelection()
+      // The SDK also ends drags that never intersected a second glyph.
+      if (!formatted.length) {
+        invalidate()
+        return
+      }
+      setActionError(null)
       try {
         const textLines = await getSelectedTextPreservingVisualHyphens(registry, documentId, scope)
-        const result = toPdfSelection(textLines, scope.getFormattedSelection())
+        if (revision !== selectionRevision.current) return
+        const result = toPdfSelection(textLines, formatted)
         setSelectionMenu(result)
         onSelectionChange(result)
       } catch {
-        setSelectionMenu(null)
-        onSelectionChange(null)
+        if (revision !== selectionRevision.current) return
+        invalidate()
+        setActionError("선택한 텍스트를 읽지 못했습니다. 다시 선택해 주세요.")
       }
     })
-    const stopEmptySpaceClick = scope.onEmptySpaceClick(() => {
-      setSelectionMenu(null)
-      onSelectionChange(null)
-    })
+    const stopEmptySpaceClick = scope.onEmptySpaceClick(invalidate)
     return () => {
+      selectionRevision.current += 1
+      stopBegin()
       stopEndSelection()
       stopEmptySpaceClick()
     }
@@ -402,44 +428,64 @@ function ReaderChrome({
   }, [currentPage, scroll, spread, spreadMode, zoom])
 
   const clearSelection = useCallback(() => {
+    selectionRevision.current += 1
     selection?.forDocument(documentId).clear()
     setSelectionMenu(null)
     onSelectionChange(null)
   }, [documentId, onSelectionChange, selection])
 
-  const hideSelectionMenu = useCallback(() => setSelectionMenu(null), [])
+  // biome-ignore lint/correctness/useExhaustiveDependencies: A newly displayed spread invalidates the previous selection and pending extraction.
+  useEffect(() => clearSelection(), [currentPage, clearSelection])
 
-  const askAboutSelection = useCallback(() => {
-    window.dispatchEvent(new CustomEvent("pdfie:selection-ai-focus-request"))
-    hideSelectionMenu()
-  }, [hideSelectionMenu])
-
-  const summarizeSelection = useCallback(() => {
-    window.dispatchEvent(
-      new CustomEvent("pdfie:selection-ai-action", {
-        detail: "선택한 구절의 핵심 주장과 논리 흐름을 간결하게 요약해 주세요.",
-      }),
-    )
-    hideSelectionMenu()
-  }, [hideSelectionMenu])
-
-  const copySelection = useCallback(() => {
-    if (!selectionMenu) return
-    void navigator.clipboard.writeText(selectionMenu.text)
-    clearSelection()
-  }, [clearSelection, selectionMenu])
-
-  const highlightSelection = useCallback(
-    (style: PdfHighlightStyle) => {
-      if (!selection || !selectionMenu) return
-      const state = selection.forDocument(documentId).getState()
-      const pages = createHighlightPages(selectionMenu, state)
-      const next = addOrRestyleHighlight(highlights, selectionMenu, pages, style)
-      setHighlights(next)
-      onHighlightsChange(next)
+  const askAboutSelection = useCallback(
+    (prompt: string | null = null) => {
+      if (!selectionMenu) return
+      onSelectionAiRequest({ id: crypto.randomUUID(), selection: selectionMenu, prompt })
       clearSelection()
     },
-    [clearSelection, documentId, highlights, onHighlightsChange, selection, selectionMenu],
+    [clearSelection, onSelectionAiRequest, selectionMenu],
+  )
+
+  const copySelection = useCallback(async () => {
+    if (!selectionMenu) return
+    try {
+      await navigator.clipboard.writeText(selectionMenu.text)
+      clearSelection()
+    } catch {
+      setActionError("클립보드에 복사하지 못했습니다. 다시 시도해 주세요.")
+    }
+  }, [clearSelection, selectionMenu])
+
+  const updateHighlights = useCallback(
+    (next: PdfTextHighlight[]) => {
+      setPreviousHighlights(highlights)
+      setHighlights(next)
+      onHighlightsChange(next)
+    },
+    [highlights, onHighlightsChange],
+  )
+
+  const highlightPages =
+    selectionMenu && selection
+      ? createHighlightPages(selectionMenu, selection.forDocument(documentId).getState())
+      : []
+  const existingHighlight = selectionMenu
+    ? findSelectionHighlight(highlights, selectionMenu, highlightPages)
+    : undefined
+
+  const highlightSelection = useCallback(
+    (style: PdfHighlightStyle, note?: string) => {
+      if (!selection || !selectionMenu) return
+      const pages = createHighlightPages(selectionMenu, selection.forDocument(documentId).getState())
+      let next = addOrRestyleHighlight(highlights, selectionMenu, pages, style)
+      if (note !== undefined) {
+        const saved = findSelectionHighlight(next, selectionMenu, pages)
+        next = next.map((item) => (item.id === saved?.id ? { ...item, note: note.trim() } : item))
+      }
+      updateHighlights(next)
+      clearSelection()
+    },
+    [clearSelection, documentId, highlights, updateHighlights, selection, selectionMenu],
   )
 
   const selectionKey = useMemo(
@@ -472,14 +518,33 @@ function ReaderChrome({
         zoom?.zoomOut()
       }
       if (event.key === "Escape") {
+        speech.stop()
         if (selectionMenu) clearSelection()
         else if (railMode === "search") closeSearch()
       }
-      if (mod && event.key.toLowerCase() === "c" && selectionMenu) {
+      if (
+        mod &&
+        event.key.toLowerCase() === "c" &&
+        selectionMenu &&
+        !isEditableKeyboardTarget(event.target)
+      ) {
         event.preventDefault()
-        void navigator.clipboard.writeText(selectionMenu.text)
+        void copySelection()
       }
 
+      if (
+        !mod &&
+        !event.altKey &&
+        !event.isComposing &&
+        !isEditableKeyboardTarget(event.target) &&
+        selectionMenu
+      ) {
+        if (event.key.toLowerCase() === "h" || event.key.toLowerCase() === "u") {
+          event.preventDefault()
+          highlightSelection(event.key.toLowerCase() === "u" ? "red-underline" : "yellow")
+          return
+        }
+      }
       const pageDirection = getPageNavigationDirection(event)
       if (!pageDirection || isEditableKeyboardTarget(event.target)) return
 
@@ -489,7 +554,18 @@ function ReaderChrome({
     }
     window.addEventListener("keydown", keydown, true)
     return () => window.removeEventListener("keydown", keydown, true)
-  }, [clearSelection, closeSearch, openSearch, railMode, navigatePage, selectionMenu, zoom])
+  }, [
+    clearSelection,
+    closeSearch,
+    openSearch,
+    railMode,
+    navigatePage,
+    selectionMenu,
+    zoom,
+    copySelection,
+    highlightSelection,
+    speech.stop,
+  ])
 
   const renderPage = (page: PageLayout) => (
     <div
@@ -520,13 +596,27 @@ function ReaderChrome({
             rotation={((documentState?.document?.pages[page.pageIndex]?.rotation ?? 0) + rotation) % 4}
             highlights={highlights}
             selectionMenu={
-              selectionMenu
-                ? (props) => (
+              selectionMenu?.pages[0]?.pageNumber === page.pageNumber
+                ? (anchor) => (
                     <SelectionActions
-                      {...props}
+                      anchor={anchor}
                       key={selectionKey}
-                      onAskAI={askAboutSelection}
-                      onSummarize={summarizeSelection}
+                      onAskAI={() => askAboutSelection()}
+                      onSummarize={() =>
+                        askAboutSelection("선택한 구절을 3–5개의 핵심 항목으로 간결하게 요약해 주세요.")
+                      }
+                      hasHighlight={Boolean(existingHighlight)}
+                      existingNote={existingHighlight?.note}
+                      onNote={(note) => highlightSelection(existingHighlight?.style ?? "yellow", note)}
+                      onRead={() => {
+                        speech.read(selectionMenu.text)
+                        clearSelection()
+                      }}
+                      onRemoveHighlight={() => {
+                        updateHighlights(highlights.filter((item) => item.id !== existingHighlight?.id))
+                        clearSelection()
+                      }}
+                      onClose={clearSelection}
                       onHighlight={highlightSelection}
                       onCopy={copySelection}
                     />
@@ -643,6 +733,37 @@ function ReaderChrome({
         </div>
       </header>
 
+      {previousHighlights && (
+        <div className="reader-action-status" role="status">
+          하이라이트·주석 변경됨
+          <button
+            type="button"
+            onClick={() => {
+              setHighlights(previousHighlights)
+              onHighlightsChange(previousHighlights)
+              setPreviousHighlights(null)
+            }}
+          >
+            되돌리기
+          </button>
+        </div>
+      )}
+      {actionError && (
+        <div className="reader-action-status" role="alert">
+          {actionError}
+          <button type="button" onClick={() => setActionError(null)}>
+            닫기
+          </button>
+        </div>
+      )}
+      {speech.reading && (
+        <div className="reader-action-status" role="status">
+          선택한 구절 읽는 중
+          <button type="button" onClick={speech.stop}>
+            <Square size={12} /> 읽기 중지
+          </button>
+        </div>
+      )}
       <div className="reader-content">
         {railOpen && (
           <aside className="navigation-rail">
@@ -653,8 +774,22 @@ function ReaderChrome({
               <button type="button" role="tab" aria-selected={railMode === "outline"} onClick={closeSearch}>
                 <ListTree size={14} /> 목차
               </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={railMode === "highlights"}
+                onClick={() => setRailMode("highlights")}
+              >
+                <Highlighter size={14} /> 주석
+              </button>
             </div>
-            {railMode === "search" ? (
+            {railMode === "highlights" ? (
+              <HighlightsPanel
+                highlights={highlights}
+                onChange={updateHighlights}
+                onNavigate={(pageNumber) => scroll?.scrollToPage({ pageNumber, behavior: "instant" })}
+              />
+            ) : railMode === "search" ? (
               <section className="search-panel" aria-label="PDF 검색 결과">
                 <form
                   className="rail-search-form"

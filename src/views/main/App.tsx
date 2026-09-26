@@ -1,7 +1,12 @@
 import { PanelRightOpen } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import type { ClassificationResult } from "../../shared/pdf/classification"
-import type { PdfSelection, PdfTextHighlight, PdfViewerSource } from "../../shared/pdf/domain"
+import type {
+  PdfSelection,
+  PdfTextHighlight,
+  PdfViewerSource,
+  SelectionAiRequest,
+} from "../../shared/pdf/domain"
 import { AiSidebar } from "./components/AiSidebar"
 import { EmptyLibrary } from "./components/EmptyLibrary"
 import { EmbedPdfWorkspace, type ReaderStatus } from "./features/pdf/adapters/EmbedPdfWorkspace"
@@ -23,6 +28,7 @@ export function App() {
   const [selection, setSelection] = useState<PdfSelection | null>(null)
   const [status, setStatus] = useState<ReaderStatus>(initialStatus)
   const [chatOpen, setChatOpen] = useState(true)
+  const [aiRequest, setAiRequest] = useState<SelectionAiRequest | null>(null)
   const [classification, setClassification] = useState(initialClassification)
   const [typeSource, setTypeSource] = useState<"auto" | "user">("auto")
   const [initialView, setInitialView] = useState({
@@ -48,6 +54,7 @@ export function App() {
         setInitialView(result.restored)
         setStatus(initialStatus)
         setSelection(null)
+        setAiRequest(null)
         if (result.persistedType.source === "user") {
           setClassification({
             ...initialClassification,
@@ -94,28 +101,6 @@ export function App() {
     window.addEventListener("pdfie:open-requested", openFromMenu)
     return () => window.removeEventListener("pdfie:open-requested", openFromMenu)
   }, [openPdf])
-
-  useEffect(() => {
-    const handleSelectionAiAction = (event: Event) => {
-      const prompt = (event as CustomEvent<string>).detail
-      setChatOpen(true)
-      window.setTimeout(
-        () => window.dispatchEvent(new CustomEvent("pdfie:ai-submit", { detail: prompt })),
-        60,
-      )
-    }
-    window.addEventListener("pdfie:selection-ai-action", handleSelectionAiAction)
-    return () => window.removeEventListener("pdfie:selection-ai-action", handleSelectionAiAction)
-  }, [])
-
-  useEffect(() => {
-    const focusSelectionQuestion = () => {
-      setChatOpen(true)
-      window.setTimeout(() => window.dispatchEvent(new CustomEvent("pdfie:ai-focus")), 60)
-    }
-    window.addEventListener("pdfie:selection-ai-focus-request", focusSelectionQuestion)
-    return () => window.removeEventListener("pdfie:selection-ai-focus-request", focusSelectionQuestion)
-  }, [])
 
   useEffect(() => {
     if (!source || status.phase !== "ready") return
@@ -168,24 +153,33 @@ export function App() {
           initialView={initialView}
           onClose={() => void closePdf()}
           onSelectionChange={setSelection}
+          onSelectionAiRequest={(request) => {
+            setAiRequest(request)
+            setChatOpen(true)
+          }}
           onHighlightsChange={(highlights) =>
             void rpc.request["pdf.saveState"]({
               documentHash: source.documentHash,
               highlights,
-            })
+            }).catch(() =>
+              setError("하이라이트와 주석을 저장하지 못했습니다. 앱을 닫기 전에 다시 시도해 주세요."),
+            )
           }
           onStatusChange={setStatus}
           onClassificationChange={handleClassification}
         />
       </div>
-      {chatOpen && (
+      <div hidden={!chatOpen} className="ai-sidebar-container">
         <AiSidebar
+          key={source.documentId}
+          visible={chatOpen}
+          request={aiRequest}
           selection={selection}
           activePage={status.page}
           documentTitle={source.fileName}
           onClose={() => setChatOpen(false)}
         />
-      )}
+      </div>
       {!chatOpen && (
         <button
           className="chat-reopen"
@@ -245,6 +239,11 @@ export function App() {
           <i /> Native WebKit
         </span>
       </footer>
+      {error && (
+        <div className="toast-error" role="alert">
+          {error}
+        </div>
+      )}
     </div>
   )
 }

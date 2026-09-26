@@ -35,6 +35,7 @@ export interface PdfTextHighlight {
   style: PdfHighlightStyle
   pages: PdfSelectionPage[]
   createdAt: string
+  note?: string
 }
 
 export interface PdfViewerSource {
@@ -62,4 +63,10 @@ export interface PdfOutlineNode {
   title: string
   pageNumber: number | null
   children: PdfOutlineNode[]
+}
+
+export interface SelectionAiRequest {
+  id: string
+  selection: PdfSelection
+  prompt: string | null
 }

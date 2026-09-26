@@ -26,6 +26,18 @@ Stable artifacts are written to `artifacts/`. Because this workspace is on an ex
 
 Open AI settings in the sidebar and enter an HTTPS OpenAI-compatible endpoint, model, and API key. Endpoint and model are remembered; the API key stays only in memory for the current app run. With a PDF selection, PDFie sends that exact text and its page list. Without a selection, the assistant is instructed to disclose that it has no extracted PDF evidence.
 
+## Selected-text actions
+
+Select a passage to Ask AI, Summarize, Copy, Read with system voices, add a note,
+or apply yellow/green/blue/pink highlighting or a red underline. `H` highlights
+and `U` underlines the current selection; `Escape` dismisses selection or stops
+reading. AI keeps the selected quote when the composer receives focus, and
+retains a summary draft if the model is not ready.
+
+The **주석** navigation tab lists saved passages, lets you change colors/edit notes,
+and jumps back to their pages. Annotation changes can be undone. Highlights and
+notes persist per document without modifying the original PDF.
+
 ## Architecture records
 
 - `docs/decisions/000-desktop-runtime.md`

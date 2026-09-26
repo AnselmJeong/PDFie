@@ -15,8 +15,9 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "test": "vitest run && bun run test:bridge",
+    "test": "vitest run && bun run test:bridge && bun run test:state",
     "test:bridge": "bun run scripts/test-source-bridge.ts",
+    "test:state": "bun run scripts/test-document-state.ts",
     "test:viewer": "vitest run tests/golden-selection"
   },
   "dependencies": {

@@ -30,10 +30,12 @@ export async function getSelectedTextPreservingVisualHyphens(
   documentId: string,
   scope: SelectionScope,
 ): Promise<string[]> {
+  // Use the public selection API first so document copy permissions are honored.
+  const selectedText = await scope.getSelectedText().toPromise()
   try {
     const plugin = registry.getPlugin("selection") as unknown as SelectionPluginDocumentAccess | null
     const document = plugin?.getCoreDocument(documentId)?.document
-    if (!document) return await scope.getSelectedText().toPromise()
+    if (!document) return selectedText
 
     const pageTexts: string[] = []
     const slices = scope.getState().slices
@@ -62,8 +64,8 @@ export async function getSelectedTextPreservingVisualHyphens(
       })
       pageTexts.push(text.replaceAll("\r\n", "\n").replaceAll("\r", "\n"))
     }
-    return pageTexts.length ? pageTexts : await scope.getSelectedText().toPromise()
+    return pageTexts.length ? pageTexts : selectedText
   } catch {
-    return await scope.getSelectedText().toPromise()
+    return selectedText
   }
 }
