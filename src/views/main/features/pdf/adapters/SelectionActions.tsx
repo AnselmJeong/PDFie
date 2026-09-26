@@ -65,7 +65,7 @@ export function SelectionActions({
     observer.observe(element)
     return () => observer.disconnect()
   }, [anchor])
-  const iconSize = 16
+  const iconSize = 14
 
   return (
     <div

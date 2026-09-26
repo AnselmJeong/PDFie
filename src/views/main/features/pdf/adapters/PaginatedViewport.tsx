@@ -8,6 +8,7 @@ import {
 import { useZoomPlugin } from "@embedpdf/plugin-zoom/react"
 import { type ReactNode, useLayoutEffect, useRef, useState } from "react"
 import { calculateFitZoom, type FitMode, resolveViewportZoom } from "./fit-zoom"
+import { createWheelPageNavigation } from "./wheel-navigation"
 
 /**
  * Present one spread, while translating local scroll offsets into the SDK's
@@ -19,18 +20,24 @@ export function PaginatedViewport({
   fitMode,
   onManualZoom,
   onPageChange,
+  onNavigatePage,
   renderPage,
 }: {
   documentId: string
   initialPage: number
   fitMode: FitMode | null
   onManualZoom: () => void
+  onNavigatePage: (direction: -1 | 1) => void
   onPageChange: (page: number) => void
   renderPage: (page: PageLayout) => ReactNode
 }) {
   const { plugin: scrollPlugin } = useScrollPlugin()
   const { plugin: viewportPlugin } = useViewportPlugin()
   const { plugin: zoomPlugin } = useZoomPlugin()
+  const navigateRef = useRef(onNavigatePage)
+  useLayoutEffect(() => {
+    navigateRef.current = onNavigatePage
+  }, [onNavigatePage])
   const applyingFit = useRef(false)
   const documentState = useDocumentState(documentId)
   const scale = documentState?.scale ?? 1
@@ -47,6 +54,38 @@ export function PaginatedViewport({
   const documentWidth = (layout?.totalContentSize.width ?? 0) * scale
   const contentHeight = (layout?.totalContentSize.height ?? 0) * scale
   const gap = viewportPlugin?.provides().getViewportGap() ?? 16
+
+  useLayoutEffect(() => {
+    const container = containerRef.current
+    if (!container || fitMode !== "fit-page" || gated) return
+    const directionForWheel = createWheelPageNavigation()
+    const wheel = (event: WheelEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        event.shiftKey ||
+        !event.deltaY ||
+        Math.abs(event.deltaX) >= Math.abs(event.deltaY)
+      )
+        return
+      if (
+        event.target instanceof Element &&
+        event.target.closest(
+          "input, textarea, select, [contenteditable]:not([contenteditable='false']), [data-selection-menu]",
+        )
+      )
+        return
+      // At the minimum zoom a very large page can still overflow: keep it scrollable.
+      if (container.scrollHeight > container.clientHeight + 2) return
+      event.preventDefault()
+      const direction = directionForWheel(event, performance.now(), container.clientHeight)
+      if (direction) navigateRef.current(direction)
+    }
+    container.addEventListener("wheel", wheel, { passive: false })
+    return () => container.removeEventListener("wheel", wheel)
+  }, [fitMode, gated])
 
   useLayoutEffect(() => {
     if (!zoomPlugin) return

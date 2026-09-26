@@ -656,9 +656,9 @@ textarea:focus-visible {
   display: flex;
   transform: translateX(-50%);
   align-items: center;
-  padding: 4px;
+  padding: 2px;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 10px;
+  border-radius: 7px;
   background: rgba(42, 39, 35, 0.98);
   box-shadow:
     0 2px 5px rgba(22, 18, 14, 0.2),
@@ -689,18 +689,18 @@ textarea:focus-visible {
 }
 .selection-popup button {
   display: inline-flex;
-  height: 36px;
+  height: 28px;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 0 13px;
+  gap: 5px;
+  padding: 0 8px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 6px;
   background: transparent;
   color: rgba(247, 244, 238, 0.86);
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 500;
   letter-spacing: -0.01em;
   transition:
     background 120ms ease,
@@ -720,7 +720,7 @@ textarea:focus-visible {
 .selection-popup-divider {
   display: block;
   width: 1px;
-  height: 20px;
+  height: 14px;
   flex: 0 0 auto;
   margin: 0 1px;
   background: rgba(255, 255, 255, 0.13);

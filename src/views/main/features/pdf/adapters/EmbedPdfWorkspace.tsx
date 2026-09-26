@@ -899,6 +899,7 @@ function ReaderChrome({
             fitMode={fitMode}
             onManualZoom={clearFitMode}
             onPageChange={setSpreadPage}
+            onNavigatePage={navigatePage}
             renderPage={renderPage}
           />
         </main>
