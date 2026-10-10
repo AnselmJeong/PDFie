@@ -388,9 +388,9 @@ export function StudyLibrary({
                 <span className="library-document-meta">
                   <time>{date(item.updatedAt)}</time>
                   {item.documentHash === currentHash ? (
-                    <span>읽는 중</span>
+                    <span data-source="reading">읽는 중</span>
                   ) : !item.sourceAvailable ? (
-                    <span>원문 없이 복습 가능</span>
+                    <span data-source="missing">원문 없이 복습 가능</span>
                   ) : (
                     <span>PDF 연결됨</span>
                   )}

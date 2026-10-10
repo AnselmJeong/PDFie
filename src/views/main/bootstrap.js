@@ -4,7 +4,7 @@ function showBootstrapError(label, detail) {
   root.innerHTML = ""
   const container = document.createElement("main")
   container.style.cssText =
-    "display:grid;width:100%;height:100%;place-content:center;padding:40px;background:#f3f0e9;color:#792e25;font:13px -apple-system,sans-serif;text-align:center"
+    "display:grid;width:100%;height:100%;place-content:center;padding:40px;background:#fafafa;color:#b91c1c;font:13px -apple-system,sans-serif;text-align:center"
   const title = document.createElement("strong")
   title.textContent = label
   const message = document.createElement("pre")
