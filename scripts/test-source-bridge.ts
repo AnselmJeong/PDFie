@@ -23,6 +23,28 @@ try {
 
   bridge.closeDocument(source.documentId)
   assert.equal((await fetch(source.url)).status, 404)
+
+  await assert.rejects(() => bridge.prepareDropUpload("notes.txt", bytes.length), /PDF 파일만/)
+  const { uploadUrl } = await bridge.prepareDropUpload("Dropped Book.pdf", bytes.length)
+  const preflight = await fetch(uploadUrl, { method: "OPTIONS" })
+  assert.equal(preflight.status, 204)
+  assert.match(preflight.headers.get("access-control-allow-methods") ?? "", /POST/)
+
+  const upload = await fetch(uploadUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/pdf" },
+    body: bytes,
+  })
+  assert.equal(upload.status, 201)
+  const uploaded = (await upload.json()) as { documentId: string }
+  const droppedSource = bridge.getSource(uploaded.documentId)
+  assert.equal(droppedSource.fileName, "Dropped Book.pdf")
+  assert.equal(droppedSource.sizeBytes, bytes.length)
+  assert.equal(await (await fetch(droppedSource.url)).text(), new TextDecoder().decode(bytes))
+
+  assert.equal((await fetch(uploadUrl, { method: "POST", body: bytes })).status, 410)
+  bridge.closeDocument(uploaded.documentId)
+  assert.equal((await fetch(droppedSource.url)).status, 404)
   console.log("PdfSourceBridge Bun runtime integration: passed")
 } finally {
   bridge.close()

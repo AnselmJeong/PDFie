@@ -33,7 +33,7 @@ export function createPdfPlugins(
     }),
     createPluginRegistration(ViewportPluginPackage, { viewportGap: 16 }),
     createPluginRegistration(SpreadPluginPackage, {
-      defaultSpreadMode: SpreadMode.Odd,
+      defaultSpreadMode: SpreadMode.None,
     }),
     createPluginRegistration(ScrollPluginPackage, {
       defaultStrategy: ScrollStrategy.Vertical,

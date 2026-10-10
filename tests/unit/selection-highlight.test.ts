@@ -48,6 +48,30 @@ describe("selection highlight overlap", () => {
 })
 
 describe("precise selection highlight geometry", () => {
+  it("renders only the selected prefix when the rest of a word shares the same run", () => {
+    const glyphs = Array.from({ length: 13 }, (_, index) => ({
+      x: 100 + index * 6,
+      y: 20,
+      width: 6,
+      height: 14,
+      flags: index === 4 ? 1 : 0,
+      tightX: 100 + index * 6,
+      tightY: 24,
+      tightWidth: 6,
+      tightHeight: 8,
+    }))
+
+    expect(
+      createPreciseSelectionHighlightRects(
+        {
+          runs: [{ charStart: 686, rect: { x: 100, y: 20, width: 78, height: 14 }, glyphs }],
+        },
+        { start: 686, count: 6 },
+        [{ origin: { x: 100, y: 20 }, size: { width: 78, height: 14 } }],
+      ),
+    ).toEqual([{ origin: { x: 100, y: 20 }, size: { width: 36, height: 14 } }])
+  })
+
   it("uses tight horizontal glyph edges while preserving the line-height band", () => {
     const rects = createPreciseSelectionHighlightRects(
       {

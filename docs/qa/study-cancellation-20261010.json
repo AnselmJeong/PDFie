@@ -1,0 +1,85 @@
+{
+  "date": "2026-10-10",
+  "installedTarget": "/Applications/PDFie.app",
+  "payloadSha256": "6d71c4067ff0237705cb9fec74ecde43abca34c665ad1c85280294e9d37fd074",
+  "files": {
+    "native": "7251295bedf8dd1bc0fff38d57b1b8339df664ad0c642e019cf4786e5f73c8de",
+    "view": "41b4ff601b39399c0312a91653b2460b23fc677e7e4fd6801812e7d98387fd21"
+  },
+  "sourceChecks": {
+    "vitest": 132,
+    "typecheck": "passed",
+    "studyIntegration": "passed",
+    "studyLibraryIntegration": "passed",
+    "lintErrors": 0,
+    "lintWarnings": 68,
+    "diffCheck": "passed"
+  },
+  "cancellation": {
+    "stopWaitsForProviderCleanup": true,
+    "terminalEmittedAfterActiveLockReleased": true,
+    "missedNotificationRecovery": "request-specific durable job status every 1500ms and on focus",
+    "oldRequestCannotClearNewJob": true,
+    "abortDuringPreparationAndCleanupTested": true,
+    "unresponsiveInterruptClosesAfterMs": 5000
+  },
+  "nativeValidation": {
+    "paper": "2026 - Carhart-Harris - The entropic brain today.pdf",
+    "preparedPages": 17,
+    "sections": 23,
+    "installedLessonCancelled": true,
+    "enabledSectionStudyButtonsAfterRecovery": 23,
+    "disabledSectionStudyButtonsAfterRecovery": 0,
+    "providerRecheckedAfterStop": true,
+    "independentQa": {
+      "cancelledLessonSection": "Type 1 versus type 2 complexity",
+      "nextSummarySection": "The origins of the entropic brain",
+      "nextSummaryState": "completed",
+      "summaryEvidenceUnits": 7,
+      "restartedLessonSection": "Single versus multi-dimensional approaches to consciousness",
+      "escapeStop": "passed",
+      "partialLessonsPublished": 0
+    }
+  },
+  "settingsGeometry": {
+    "initial": {
+      "parent": {
+        "x": 80,
+        "y": 60,
+        "width": 1480,
+        "height": 968
+      },
+      "settings": {
+        "x": 480,
+        "y": 205,
+        "width": 680,
+        "height": 678
+      },
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    "resized": {
+      "parent": {
+        "x": 0,
+        "y": 30,
+        "width": 2560,
+        "height": 1410
+      },
+      "settings": {
+        "x": 940,
+        "y": 396,
+        "width": 680,
+        "height": 678
+      },
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    "includesNativeTitleBar": true
+  },
+  "backupDirectory": "/Users/anselm/Library/Application Support/PDFie Backups/20261010-study-cancellation",
+  "validationIsolation": "Independent app identity and copied study data used while another PDFie task was active; final cancellation also exercised in installed app. Temporary QA login copy removed."
+}

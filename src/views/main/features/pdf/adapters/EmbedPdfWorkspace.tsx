@@ -19,6 +19,7 @@ import { SpreadMode, useSpread } from "@embedpdf/plugin-spread/react"
 import { TilingLayer } from "@embedpdf/plugin-tiling/react"
 import { useZoom, ZoomMode } from "@embedpdf/plugin-zoom/react"
 import {
+  Camera,
   ChevronLeft,
   ChevronRight,
   Columns2,
@@ -30,6 +31,7 @@ import {
   RotateCw,
   Search,
   Square,
+  Undo2,
   X,
   ZoomIn,
 } from "lucide-react"
@@ -44,7 +46,10 @@ import type {
   SelectionAiRequest,
 } from "../../../../../shared/pdf/domain"
 import { toPdfSelection } from "../../../../../shared/pdf/selection"
+import type { CaptureAsset, EvidenceRef } from "../../../../../shared/study/contracts"
+import { CaptureOverlay } from "./CaptureOverlay"
 import { CleanSelectionLayer } from "./CleanSelectionLayer"
+import { EvidenceOverlay } from "./EvidenceOverlay"
 import { createPdfPlugins } from "./embedpdf-plugins"
 import { collectPdfFastFacts } from "./fast-facts"
 import type { FitMode } from "./fit-zoom"
@@ -53,10 +58,14 @@ import { PaginatedViewport } from "./PaginatedViewport"
 import { clampPage, getPageGroup } from "./page-navigation"
 import { SelectionActions } from "./SelectionActions"
 import { getSelectedTextPreservingVisualHyphens } from "./selection-text"
+import { beginNativeAnalysis } from "./study-analysis"
 import { addOrRestyleHighlight, createHighlightPages, findSelectionHighlight } from "./text-highlights"
 import { useSelectionSpeech } from "./useSelectionSpeech"
 
 interface EmbedPdfWorkspaceProps {
+  revealRequest: { id: string; evidence: EvidenceRef } | null
+  captureRequest: string | null
+  onCapture: (capture: CaptureAsset) => void
   source: PdfViewerSource
   initialView: {
     currentPage: number
@@ -219,7 +228,14 @@ function ReaderChrome({
   onHighlightsChange,
   onStatusChange,
   onClassificationChange,
+  revealRequest,
+  captureRequest,
+  onCapture,
 }: EmbedPdfWorkspaceProps & { documentId: string; registry: PluginRegistry }) {
+  const [evidence, setEvidence] = useState<EvidenceRef | null>(null)
+  const [returnPage, setReturnPage] = useState<number | null>(null)
+  const [captureMode, setCaptureMode] = useState(false)
+  const handledReveal = useRef<string | null>(null)
   const { provides: scroll, state: scrollState } = useScroll(documentId)
   const { provides: zoom, state: zoomState } = useZoom(documentId)
   const { provides: rotate, rotation } = useRotate(documentId)
@@ -256,6 +272,44 @@ function ReaderChrome({
   const searchInputRef = useRef<HTMLInputElement>(null)
   const searchResultsRef = useRef<HTMLDivElement>(null)
   const lastAutoNavigatedResult = useRef("")
+
+  useEffect(() => {
+    if (captureRequest) setCaptureMode(true)
+  }, [captureRequest])
+  useEffect(() => {
+    if (!revealRequest || !scroll || handledReveal.current === revealRequest.id) return
+    const ref = revealRequest.evidence
+    if (ref.documentHash !== source.documentHash) {
+      setActionError("다른 문서의 근거입니다.")
+      return
+    }
+    handledReveal.current = revealRequest.id
+    setReturnPage((old) => old ?? currentPage)
+    setEvidence(ref)
+    const rect = ref.rects[0]
+    scroll.scrollToPage({
+      pageNumber: ref.pageIndex + 1,
+      behavior: "instant",
+      ...(rect
+        ? { pageCoordinates: { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }, alignY: 35 }
+        : {}),
+    })
+    if (ref.precision === "page-only")
+      setActionError("정확한 위치를 찾지 못했습니다. 해당 페이지와 원문 발췌를 확인하세요.")
+  }, [revealRequest, scroll, source.documentHash, currentPage])
+
+  useEffect(() => {
+    if (!outlineLoaded || !scrollState.totalPages) return
+    return beginNativeAnalysis(
+      registry,
+      documentId,
+      source.documentId,
+      scrollState.totalPages,
+      outline,
+      () => window.dispatchEvent(new CustomEvent("pdfie:index-updated")),
+      setActionError,
+    )
+  }, [documentId, outline, outlineLoaded, registry, scrollState.totalPages, source.documentId])
 
   useEffect(() => {
     if (restoredViewApplied.current || !scroll || !rotate || !scrollState.totalPages) return
@@ -500,6 +554,11 @@ function ReaderChrome({
 
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
+      if (event.target instanceof Element && event.target.closest(".ai-sidebar, .lesson-player")) return
+      if (event.key === "Escape" && captureMode) {
+        setCaptureMode(false)
+        return
+      }
       const mod = event.metaKey || event.ctrlKey
       if (mod && event.key.toLowerCase() === "f") {
         event.preventDefault()
@@ -555,6 +614,7 @@ function ReaderChrome({
     window.addEventListener("keydown", keydown, true)
     return () => window.removeEventListener("keydown", keydown, true)
   }, [
+    captureMode,
     clearSelection,
     closeSearch,
     openSearch,
@@ -583,9 +643,17 @@ function ReaderChrome({
             documentId={documentId}
             pageIndex={page.pageIndex}
             scale={zoomState.currentZoomLevel}
+            className="pdf-page-content-layer"
+            aria-hidden="true"
           />
           <SearchLayer
             documentId={documentId}
+            pageIndex={page.pageIndex}
+            scale={zoomState.currentZoomLevel}
+            className="pdf-page-content-layer"
+          />
+          <EvidenceOverlay
+            evidence={evidence}
             pageIndex={page.pageIndex}
             scale={zoomState.currentZoomLevel}
           />
@@ -626,6 +694,24 @@ function ReaderChrome({
           />
         </PagePointerProvider>
       </Rotate>
+      {captureMode && documentState?.document?.pages[page.pageIndex] && (
+        <CaptureOverlay
+          registry={registry}
+          documentId={documentId}
+          sourceId={source.documentId}
+          documentHash={source.documentHash}
+          pageIndex={page.pageIndex}
+          width={documentState.document.pages[page.pageIndex]!.size.width}
+          height={documentState.document.pages[page.pageIndex]!.size.height}
+          rotation={((documentState.document.pages[page.pageIndex]!.rotation ?? 0) + rotation) % 4}
+          scale={zoomState.currentZoomLevel}
+          onCapture={(asset) => {
+            setCaptureMode(false)
+            onCapture(asset)
+          }}
+          onError={setActionError}
+        />
+      )}
     </div>
   )
 
@@ -676,6 +762,12 @@ function ReaderChrome({
         </div>
 
         <div className="toolbar-group toolbar-actions">
+          <IconButton
+            label={captureMode ? "캡처 취소" : "그림·표 캡처"}
+            onClick={() => setCaptureMode(!captureMode)}
+          >
+            <Camera size={16} />
+          </IconButton>
           <IconButton
             label={spreadMode === SpreadMode.None ? "두 페이지 보기" : "한 페이지 보기"}
             onClick={toggleSpread}
@@ -732,6 +824,25 @@ function ReaderChrome({
           </IconButton>
         </div>
       </header>
+
+      {returnPage !== null && (
+        <div className="reader-action-status evidence-navigation" role="status">
+          <span>근거 확인 · PDF p. {(evidence?.pageIndex ?? 0) + 1}</span>
+          <button
+            type="button"
+            onClick={() => {
+              scroll?.scrollToPage({ pageNumber: returnPage, behavior: "instant" })
+              setReturnPage(null)
+              setEvidence(null)
+            }}
+          >
+            <Undo2 size={13} /> 이전 읽던 페이지로
+          </button>
+          <button type="button" onClick={() => setEvidence(null)}>
+            강조 지우기
+          </button>
+        </div>
+      )}
 
       {previousHighlights && (
         <div className="reader-action-status" role="status">

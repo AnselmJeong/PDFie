@@ -1,1068 +1,543 @@
-# PDFie implementation plan
+# PDFie implementation plan — 근거·학습·구독 연결
 
-_`PRD.md`를 실제 코드로 옮기기 위한 단계별 실행 계약 — 2026-08-04_
+작성일: 2026-10-10 (Asia/Seoul)
+상태: 계획 및 선행 조사 완료. 구현·실계정 통합·설치 앱 검증은 미실행.
+제품 기준: [PRD.md](PRD.md)
+기존 계획: [2026-08-04 보존본](docs/archive/2026-08-04/implementation_plan.md)
 
----
+## 1. 기술 판단과 실행 원칙
 
-## 📋 실행 규칙
+전체 기능은 현재 stack을 유지하면서 단계적으로 구현할 수 있다. 핵심 의존 관계는 다음과 같다.
 
-이 계획의 목적은 다른 agent가 저장소를 처음 접해도 범위와 순서를 추측하지 않고 구현할 수 있게 하는 것이다. 모든 단계는 이전 단계의 exit criteria를 통과한 후 진행한다.
+~~~text
+P0 기술 gate
+ ├─ P1 데이터·작업·provider 공통 기반 ─ P2 구독 연결
+ └─ P3 문서 색인·좌표 ─ P4 검색·인용·이동
+                           ├─ P5 목표·섹션 요약
+                           └─ P6 capture·vision
+                               P5 + P6 ─ P7 학습·점검 ─ P8 설치 앱 QA
+~~~
 
-### 시작 전 필수 읽기 순서
+실제 작업은 한 단계의 변경과 검증을 완료한 뒤 다음 단계로 진행한다. 위 병렬 가지는 의존성을 뜻하며 subagent나 다중 작업 트리 실행을 지시하지 않는다.
 
-1. `/Volumes/Aquatope/_DEV_/PDFie/PRD.md`
-2. `/Volumes/Aquatope/_DEV_/PDFie/implementation_plan.md`
-3. `/Volumes/Aquatope/_DEV_/Interactive_Learning/electrobun.config.ts`
-4. `/Volumes/Aquatope/_DEV_/Interactive_Learning/src/bun/`
-5. `/Volumes/Aquatope/_DEV_/Interactive_Learning/src/bun/preppy-service.ts`
-6. `/Volumes/Aquatope/_DEV_/PDF_to_MD/pdf-to-md/electrobun.config.ts`
-7. `/Volumes/Aquatope/_DEV_/PDF_to_MD/pdf-to-md/src/bun/`
-8. `/Volumes/Aquatope/_DEV_/MD_Reader/package.json`
-9. `/Volumes/Aquatope/_DEV_/MD_Reader/src/renderer/src/App.tsx`
-10. `/Volumes/Aquatope/_DEV_/MD_Reader/src/renderer/src/components/ChatPanel/`
-11. `/Volumes/Aquatope/_DEV_/MD_Reader/src/renderer/src/store/useChatStore.ts`
-12. `/Volumes/Aquatope/_DEV_/MD_Reader/src/main/ai-chat-service.ts`
-13. `/Volumes/Aquatope/_DEV_/MD_Reader/src/main/chat-session-service.ts`
-14. `/Volumes/Aquatope/_DEV_/Preppy/ARTICLE_MODE.md`
-15. `/Volumes/Aquatope/_DEV_/Preppy/PDF_CHAPTER_HIERARCHY.md`
+- 기존 Electrobun native WebKit + EmbedPDF/PDFium을 유지한다.
+- 변경 전 Git 상태를 기록하고 사용자 작업을 보존한다. 자동 commit/push/install은 계획에 포함하지 않는다.
+- PDFie 내부에서 완결되는 변경을 우선한다. 다른 앱은 필요할 때 읽기 전용 참고로만 사용한다.
+- source text, evidence, learner state의 권위는 PDFie가 가진다. LLM과 provider session은 교체 가능하게 둔다.
+- 기능별 acceptance를 통과시킨다. CLI 성공, source test 성공, 설치 앱 성공을 서로 대신하지 않는다.
+- 모든 자동 생성 호출은 같은 provider router·usage 정책·취소 경로를 이용한다.
 
-### 절대 규칙
+## 2. 이번 조사에서 확인한 것
 
-- PDFie 이외의 모든 기준 저장소를 구현 중 수정하지 않는다.
-- 모든 기준 저장소의 `.git`, `node_modules`, `out`, `dist`, `.venv`, cache를 복사하지 않는다.
-- 사용자 소유의 dirty/untracked 파일을 정리하거나 삭제하지 않는다.
-- Phase 0은 `bundleCEF: false`와 macOS native renderer로 시작한다. CEF는 원인 분리 spike 이전에 켜지 않는다.
-- Phase 1부터 Phase 11은 Electrobun native 확정을 전제로 한다. Phase 0에서 CEF 또는 Electron이 선택되면 진행을 멈추고 두 최상위 문서를 먼저 갱신한다.
-- Phase 0 runtime gate가 끝나기 전에 MD Reader main-process code를 대량 이식하지 않는다.
-- Electron preload, `ipcMain`, `ipcRenderer`, electron-builder config와 Electron 전용 path helper를 PDFie에 그대로 복사하지 않는다.
-- Electrobun view에서 Bun filesystem, process 또는 database API를 직접 사용하지 않는다.
-- Bun/view 경계는 `src/shared/rpc/`의 typed RPC schema로 정의한다.
-- runtime writable data는 `Utils.paths.userData`, cache 또는 logs 아래에만 저장하고 app resource directory에 쓰지 않는다.
-- viewer selection benchmark를 통과하기 전에 production viewer를 확정하지 않는다.
-- article/book 분류 전에 Docling을 선행 실행하지 않는다.
-- usable bookmark가 있는 book에 Docling을 기본 실행하지 않는다.
-- 현재 page가 바뀔 때마다 Docling 또는 전체 문서 extraction을 다시 실행하지 않는다.
-- 원본 PDF를 변환된 Markdown으로 대체해 표시하지 않는다.
-- raw file path를 임의 RPC payload나 remote URL에 노출하지 않는다.
-- `pdf_item_index` 또는 viewer DOM node를 영구 locator로 저장하지 않는다.
-- 테스트가 실패한 채 다음 phase로 넘어가지 않는다.
-
-### 의사결정 기록
-
-Phase 0에서 `docs/decisions/000-desktop-runtime.md`와 `docs/decisions/001-pdf-viewer.md`를 작성한다. 선택 이유만 적지 말고 fixture별 실제 결과, 실패, native/CEF/Electron packaging 결과와 버린 후보의 tradeoff를 기록한다. 두 decision이 완료된 이후 framework나 viewer를 바꾸려면 새 ADR과 회귀 검증이 필요하다.
-
-## ⚙️ 목표 디렉터리 구조
-
-초기 scaffold가 끝난 뒤 최소한 다음 경계를 갖는다. 실제 파일을 추가할 때 책임이 겹치면 새 파일을 만들기보다 이 경계를 우선 정리한다.
-
-```text
-PDFie/
-├── PRD.md
-├── implementation_plan.md
-├── docs/
-│   ├── decisions/
-│   └── qa/
-├── scripts/
-│   ├── prepare-python-runtime.ts
-│   └── verify-packaged-app.ts
-├── tests/
-│   ├── fixtures/pdf/
-│   ├── golden-selection/
-│   ├── unit/
-│   └── integration/
-├── src/
-│   ├── bun/
-│   │   ├── ai/
-│   │   ├── pdf/
-│   │   │   ├── analysis-cache.ts
-│   │   │   ├── analysis-service.ts
-│   │   │   ├── document-source-bridge.ts
-│   │   │   ├── document-repository.ts
-│   │   │   ├── preppy-worker.ts
-│   │   │   └── worker-process.ts
-│   │   ├── rpc-handlers.ts
-│   │   └── index.ts
-│   ├── views/main/
-│   │   ├── index.html
-│   │   ├── index.tsx
-│   │   ├── components/
-│   │   │   ├── ChatPanel/
-│   │   │   └── PdfReader/
-│   │   ├── features/pdf/
-│   │   │   ├── adapters/
-│   │   │   ├── context/
-│   │   │   └── selection/
-│   │   ├── store/
-│   │   └── styles/
-│   └── shared/
-│       ├── ai/
-│       ├── rpc/
-│       └── pdf/
-│           ├── classification.ts
-│           ├── context-types.ts
-│           ├── domain.ts
-│           └── rpc.ts
-├── python/
-├── electrobun.config.ts
-├── package.json
-└── tsconfig.json
-```
-
-## 🔍 Phase 0 — 기술 spike와 hard gate
-
-### 목적
-
-핵심 가치인 selection 정확도와 production packaging 가능성을 코드베이스 전체보다 먼저 검증한다. 이 phase에서는 MD Reader sidebar를 아직 통합하지 않는다.
-
-### 0.1 저장소와 최소 harness 준비
-
-1. PDFie에서 Git 저장소를 초기화한다.
-2. Electrobun + React + TypeScript의 최소 harness를 만든다.
-3. 현재 설치할 Electrobun version과 generated config type을 공식 문서 및 typecheck로 확인한다. API가 빠르게 바뀌므로 과거 config field를 추측하지 않는다.
-4. package name, app identifier와 product name은 처음부터 PDFie로 설정한다.
-5. macOS deployment target은 14 이상으로 명시한다.
-6. macOS config는 CEF를 포함하지 않고 native renderer를 기본값으로 둔다.
-7. Bun entrypoint는 `src/bun/index.ts`, React view entrypoint는 `src/views/main/index.tsx`로 둔다.
-8. `views://main/index.html`에서 main view를 열고 Bun/view 사이에 최소 typed RPC round trip을 만든다.
-9. formatter, typecheck, lint와 최소 unit test runner를 추가한다.
-10. dev, typecheck, unit test, dev build와 stable build script가 동작하게 한다.
-
-예상 script contract:
-
-```json
-{
-  "scripts": {
-    "dev": "electrobun dev",
-    "dev:watch": "electrobun dev --watch",
-    "build:dev": "electrobun build",
-    "build:stable": "electrobun build --env=stable",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:viewer": "vitest run tests/golden-selection"
-  }
-}
-```
-
-package manager와 script runner는 Bun을 사용한다. 현재 라이브러리의 정확한 설정은 구현 시 공식 문서를 다시 확인하되, `/Volumes/Aquatope/_DEV_/Interactive_Learning/electrobun.config.ts`의 검증된 macOS native config와 build layout을 비교 기준으로 사용한다. `bundleCEF: false`와 native renderer라는 의미는 유지하되 config key 이름은 설치 version의 TypeScript type을 따른다.
-
-### 0.2 PDF source bridge spike
-
-Electron custom protocol을 그대로 옮기지 않는다. Bun process만 raw path를 알고 view에는 임시 `documentId`만 노출하는 `PdfSourceBridge` contract를 먼저 만든다.
-
-다음 두 전달 방식을 long-book fixture로 비교한다.
-
-1. typed RPC로 PDF bytes를 받아 view에서 Blob URL을 만드는 방식
-2. Bun-owned loopback source server가 random port와 per-launch token으로 range request를 제공하는 방식
-
-비교 항목은 첫 page 시간, 300페이지 문서의 peak memory, bytes duplicate copy, range request 지원, 취소, token 노출과 packaged app 동작이다. loopback 방식을 선택하면 `127.0.0.1`에만 bind하고 path 대신 document ID를 사용하며, 고정 token·directory listing·임의 path query를 금지한다. 선택 결과는 runtime ADR에 포함하고 이후 viewer는 `PdfSourceBridge`만 참조한다.
-
-### 0.3 Fixture corpus 준비
-
-commit 가능한 fixture는 직접 생성했거나 재배포 허용이 명확해야 한다. Preppy의 실제 책/논문 example은 로컬 수동 QA에는 사용할 수 있지만 라이선스 확인 없이 PDFie에 복사하지 않는다.
-
-최소 fixture 유형:
-
-| ID | 유형 | 반드시 검증할 selection |
+| 항목 | 관찰 | 검증하지 않은 것 |
 | --- | --- | --- |
-| `single-column-en` | 영어 단일 column | 문장, 문단, punctuation |
-| `two-column-paper` | 학술 2단 편집 | column 경계, footnote |
-| `korean-paper` | 한국어 text layer | 조사·문장부호·줄바꿈 |
-| `ligature-hyphen` | ligature와 줄끝 hyphen | copy text 정규화 |
-| `rotated-page` | 90도 회전 page | rect와 text |
-| `multi-page` | page를 넘는 선택 | page별 rect |
-| `scanned-image` | text layer 없음 | 설명 가능한 실패 |
-| `long-book` | 300페이지 이상 | virtualization과 memory |
-| `nested-bookmarks` | Part → Chapter | outline tree |
-| `bad-bookmarks` | 외부·중복·역행 destination | fallback 판정 |
+| 소스 | HEAD f1818c2 + 미커밋 작업, 선택 좌표·검색 이동·주석 저장·Ollama streaming | 현재 앱을 실행한 기능 재검증 |
+| 문서 | 기존 PRD/plan의 신규 프로젝트 전제와 README/ADR 002 일부가 오래됨 | 과거 QA 결과 재현 |
+| PDF API | 설치 타입에 getPageGeometry, getTextSlices, renderPageRect 존재 | 자동 문단 분리와 crop 실제 정확성 |
+| Context7 | EmbedPDF 공식 문서의 page rectangle rendering 조회 | 설치 버전에서 native WebKit crop 왕복 |
+| Codex | CLI 0.160.0, 격리된 임시 home에서 schema 생성 | 로그인·account access·추론·도구 차단 |
+| Claude | 공식 CLI 2.1.296의 version/help | 구독 인증·vision·사용량·중지 |
+| SQLite | 로컬 Bun 1.3.8 / SQLite 3.54.0의 메모리 DB에서 FTS5 생성 성공 | Electrobun에 bundled된 Bun과 설치 앱 FTS5 |
 
-각 golden case는 다음 형식으로 저장한다.
+Codex 임시 schema에서 확인한 필드: UserInput의 image/localImage, TurnStartParams.outputSchema, ThreadStartParams.ephemeral, Model.inputModalities, GetAccountRateLimitsResponse.ordinaryUsageAllowed와 rateLimitsByLimitId. 이 버전은 **조사 버전**이며 지원 최소 버전으로 확정하지 않는다.
 
-```json
-{
-  "fixture": "two-column-paper.pdf",
-  "caseId": "left-column-paragraph-1",
-  "expectedText": "...",
-  "expectedPages": [1],
-  "notes": "The right column must not be included."
+실계정 인증 파일·브라우저 토큰을 읽지 않았고 LLM 추론 호출은 하지 않았다. 로그인과 계정별 모델 동작은 구현 단계의 별도 검증이다.
+
+## 3. 현재 코드에 연결할 위치
+
+| 기존 파일 | 작업 |
+| --- | --- |
+| src/shared/pdf/domain.ts | 문서·좌표 계약 확장; 기존 PdfSelection/PdfTextHighlight 호환 유지 |
+| src/shared/rpc/app-rpc.ts | 짧은 요청 + job/event API, provider·analysis·study DTO |
+| src/bun/index.ts | service 조립, job lifecycle, quit cleanup; 기능 로직은 분리 |
+| src/bun/ai/ollama-cloud-service.ts | 기존 provider adapter로 감싸고 공통 요청 형식 적용 |
+| src/bun/ai/ai-settings-repository.ts | versioned provider settings 이관; 기존 key 보존 |
+| src/bun/pdf/document-state-repository.ts | 기존 읽기/주석 저장 유지, 새 store와 역할 분리 |
+| src/bun/pdf/document-source-bridge.ts | 등록 문서 확인 API와 제한된 capture asset 전달 검토 |
+| src/views/main/components/AiSidebar.tsx | durable session, AnswerView, citation, scope, attachment 연결 |
+| src/views/main/features/pdf/adapters/EmbedPdfWorkspace.tsx | revealEvidence/capture/analysis adapter를 얇게 연결 |
+| src/views/main/features/pdf/adapters/fast-facts.ts | 분류용 표본 추출 유지; 전체 색인과 분리 |
+| src/views/main/features/pdf/adapters/CleanSelectionLayer.tsx | 사용자 주석과 별개의 evidence overlay |
+| src/views/main/features/pdf/adapters/selection-highlight.ts | 줄별 rect 정밀화 재사용 및 좌표 변환 QA |
+| src/views/main/App.tsx | 활성 문서·session·학습 범위의 단일 소유자 |
+| src/views/main/index.html | 기존 CSP 유지; 학습을 이유로 전역 script 권한 확대 금지 |
+
+새 모듈의 제안 구조:
+
+~~~text
+src/shared/
+  evidence/        schemas, source-block, anchors, citation, answer
+  study/           goal, lesson-spec, assessment, validation
+  ai/              provider-contract, capability, job-events
+src/bun/
+  ai/providers/    ollama-cloud, codex, claude-code, optional-api
+  ai/transport/    subprocess-json, deadlines, process-discovery
+  analysis/        analysis-service, ingest-validation, revision-cache
+  retrieval/       lexical-index, query-expansion, context-assembler
+  evidence/        citation-validator, evidence-repository
+  study/           goals, summaries, lessons, assessment
+  jobs/            scheduler, event-log, cancellation
+  persistence/     database, migrations, repositories
+  assets/          capture-store, image-validation
+src/views/main/
+  features/pdf/adapters/
+    analysis-adapter, geometry-transform, evidence-overlay, capture-overlay
+  features/chat/   AnswerView, CitationChip, EvidencePreview, ScopePicker
+  features/study/  GoalsPanel, SectionActions, LessonPlayer, AssessmentView
+  features/ai/     ProviderSettings, UsageStatus
+~~~
+
+이는 제안 경로이며 현재 구현되어 있다는 뜻은 아니다. 최소 기능을 위해 기존 파일 전체를 한꺼번에 분해하지 않는다.
+
+## 4. 데이터와 좌표 계약
+
+### 4.1 영구 ID와 분석 버전
+
+- DocumentVersion의 기본 식별자는 원본 PDF bytes의 SHA-256이다. 파일 경로와 열린 탭의 documentId는 영구 identity가 아니다.
+- IndexRevision은 documentHash + extractorVersion + layoutVersion + OCR 설정으로 식별한다.
+- Block ID는 revision 안에서 고정한다. 페이지·추출 range·원문 hash로 재현 가능하게 만들되, reindex 후 동일 ID를 억지로 유지하지 않는다.
+- 이전 답변이 참조하는 evidence snapshot과 revision은 보관한다. 재색인 결과로 조용히 바꾸지 않는다.
+- 재연결은 같은 문서/페이지의 quote·인접 문맥·geometry를 대조하고 유일하게 일치할 때만 한다. 아니면 stale/unresolved로 남긴다.
+- 같은 원문이 반복되는 running header와 본문을 quote만으로 혼동하지 않는다.
+
+### 4.2 제안 타입
+
+아래는 설계 계약의 핵심 필드이며 구현 시 runtime schema validation을 함께 작성한다.
+
+~~~ts
+type SourceRole =
+  | "paragraph" | "heading" | "caption" | "figure" | "table"
+  | "equation" | "footnote" | "reference" | "header-footer";
+
+type Rect = { x: number; y: number; width: number; height: number };
+
+interface SourceSpan {
+  pageIndex: number;                  // 내부 0-based
+  pageLabel?: string;                 // 인쇄된 i, 3, S1 등
+  frame: "crop-top-left-unrotated-v1"; // PDFie canonical frame
+  pageWidth: number; pageHeight: number; // PDF points
+  rects: Rect[];                      // 줄/영역별; CSS pixel 금지
+  engineRange?: { start: number; count: number };
+  textRange?: { start: number; end: number };
 }
-```
 
-pointer drag 자체는 자동화가 불안정할 수 있으므로 두 층으로 검증한다.
-
-1. selection plugin/API unit-level fixture
-2. 실제 Electrobun native view에서 사람이 golden 시작·끝을 drag하는 manual checklist
-
-### 0.4 Candidate A: EmbedPDF headless
-
-1. Extend UI source를 참고하되 component 전체를 복사하지 않는다.
-2. 다음 plugin만으로 최소 viewer를 만든다.
-   - document manager
-   - viewport, scroll, render/tiling
-   - selection
-   - search
-   - bookmark
-   - zoom, rotate
-3. local PDF는 0.2에서 선택한 `PdfSourceBridge`로 연다.
-4. selection의 formatted result에서 text, page index, rect를 수집한다.
-5. bookmark tree와 destination page를 수집한다.
-6. PDFium WASM을 `build.copy` 대상의 로컬 asset으로 지정하고 `views://`에서 결정적으로 찾는다.
-7. PDFium worker와 image encoder worker의 Blob URL module-worker 생성이 native WebKit에서 동작하는지 확인한다.
-8. CSP의 `worker-src`, `script-src`, `connect-src`와 WASM 실행에 필요한 최소 권한만 기록한다.
-9. `SharedArrayBuffer`가 실제 선택 configuration에서 필요한지 확인하고, 필요할 때만 cross-origin isolation 전략을 별도 기록한다.
-10. development와 stable packaged `.app`에서 같은 fixture를 연다.
-
-기록할 값:
-
-- first page time
-- selection golden 결과
-- 300페이지 scroll memory trend
-- WASM asset path와 CSP 요구사항
-- package size 변화
-- Electrobun native stable `.app` 성공 여부
-- Blob module worker 생성과 WASM MIME/fetch 결과
-- `views://`와 source bridge의 CSP 요구사항
-- 선택 rect가 zoom/rotation 후 맞는지
-
-### 0.5 Candidate B: PDFSlick
-
-1. `@pdfslick/react`로 같은 최소 viewer를 만든다.
-2. `textLayerMode`를 명시하고 제공 CSS를 정확히 포함한다.
-3. store에서 page, zoom과 `documentOutline`을 adapter 형태로 읽는다.
-4. DOM selection과 PDF.js text item을 page/bbox locator로 정규화한다.
-5. Candidate A와 동일 fixture, 동일 측정법을 사용한다.
-6. native WebKit development build와 stable packaged `.app`에서 worker/CMap asset을 확인한다.
-
-### 0.6 Runtime fallback gate
-
-Phase 0은 다음 순서를 바꾸지 않는다.
-
-1. Electrobun native + EmbedPDF를 먼저 검증한다.
-2. EmbedPDF가 native WebKit에서만 실패하면 동일 commit과 fixture를 Electrobun CEF에서 재실행해 browser-engine 원인인지 분리한다.
-3. PDFSlick은 native WebKit에서 selection golden gate를 통과할 때만 대안이 된다. PDF.js 기반이라는 이유로 낮은 selection 정확도를 허용하지 않는다.
-4. CEF에서만 필수 gate가 통과하면 CEF를 즉시 production 기본값으로 만들지 않는다.
-5. 같은 최소 viewer를 Electron Chromium에서 실행하고 MD Reader main-process 재사용 이점, app 크기, startup, memory, worker packaging과 유지보수 비용을 비교한다.
-6. 결과를 `docs/decisions/000-desktop-runtime.md`에 기록하고 Phase 1 전에 Electrobun native, Electrobun CEF 또는 Electron 중 하나를 확정한다.
-
-기본 추천은 Electrobun native다. Electrobun CEF와 Electron은 fallback 후보이며, CEF를 포함한다면 Electrobun의 native bundle 이점이 줄어든다는 비용을 decision에 명시한다. native WebKit이 모든 필수 gate를 통과하면 CEF와 Electron 비교는 실행하지 않는다.
-
-### 0.7 Viewer 결정
-
-다음 우선순위로 결정한다.
-
-1. selection text와 reading order 정확성
-2. page/bbox locator 안정성
-3. 확정 runtime의 stable packaged app 동작
-4. long-document performance
-5. bookmark와 page API 접근성
-6. MD Reader style로 감쌀 수 있는 정도
-7. maintenance와 license
-
-UI가 더 예쁘다는 이유로 정확성이 낮은 후보를 선택하지 않는다. native runtime에서 둘 다 golden gate를 통과하지 못하면 React-PDF로 되돌아가지 않는다. 먼저 0.6의 browser-engine 원인 분리를 끝내고, direct PDF.js viewer 또는 다른 PDFium integration을 조사하는 별도 decision을 만든다.
-
-### Exit criteria
-
-- [ ] 최소 20개 golden selection 결과가 기록됨
-- [ ] 선택 후보가 모든 필수 golden case를 통과함
-- [ ] nested bookmark를 tree로 읽을 수 있음
-- [ ] 300페이지 PDF가 virtualized scroll됨
-- [ ] PDF source bridge가 raw path 없이 development와 packaged app에서 동작함
-- [ ] Electrobun native gate 결과가 development와 stable packaged app에서 기록됨
-- [ ] 확정 runtime의 development와 stable packaged app에서 fixture가 열림
-- [ ] 확정 runtime에서 Blob/module worker, WASM, CMap/font asset이 offline packaged app에서 로드됨
-- [ ] `docs/decisions/000-desktop-runtime.md` 완료
-- [ ] `docs/decisions/001-pdf-viewer.md` 완료
-- [ ] runtime ADR이 Electrobun native를 확정하면 stable artifact에 CEF가 포함되지 않음
-- [ ] runtime ADR이 CEF 또는 Electron을 선택하면 Phase 1 전에 `PRD.md`와 이 계획을 갱신하고 현재 실행을 중단함
-- [ ] baseline tests와 build 통과
-
-권장 commit: `spike: validate PDF viewer selection and packaging`
-
-## 📦 Phase 1 — MD Reader 기반 app shell과 AI 재사용
-
-### 목적
-
-검증된 viewer harness에 MD Reader의 app chrome과 AI sidebar를 선택적으로 이식한다. Markdown과 EPUB reader code는 가져오지 않는다.
-
-### 1.1 이식할 영역
-
-실제 MD Reader 상태를 먼저 확인하고 아래 목록을 기능 단위로 이식한다. Electron과 Node import가 없는 React/shared 코드는 선택적으로 복사할 수 있지만, main-process 파일은 제품 동작의 기준으로 읽고 Electrobun Bun service로 포팅한다.
-
-Bun-side service 포팅 후보:
-
-- `agent-memory-files.ts`
-- `agent-memory-service.ts`
-- `agent-memory-settings.ts`
-- `ai-chat-service.ts`
-- `ai-chat-types.ts`
-- `ai-provider-settings.ts`
-- `chat-session-service.ts`
-- `mem0-client.ts`
-- `memory-extractor.ts`
-- `ollama-openai-client.ts`
-- `ollama-service.ts`
-- `ollama-web-search-service.ts`
-- `settings-service.ts`
-- `simple-store.ts`
-- `web-research.ts`
-
-Main view 후보:
-
-- `components/ChatPanel/`
-- `store/useChatStore.ts`
-- AI 관련 `SettingsModal` 영역
-- `utils/ollama-model-filter.ts`
-- AI sidebar markdown style
-- theme와 sidebar width 관련 UI store
-
-Shared 후보:
-
-- `shared/ai-prompts.ts`
-
-각 후보마다 원본 MD Reader commit, 가져온 제품 동작, 제외한 Electron 의존성과 PDFie target 파일을 `docs/decisions/002-md-reader-ai-port.md`에 기록한다.
-
-### 1.2 가져오지 않을 영역
-
-- Markdown renderer와 editor/save behavior
-- EPUB renderer, CFI, annotation와 reading progress service
-- Markdown/EPUB `chat-context.ts`
-- TTS는 별도 요청 전까지 제외
-- MD/EPUB file extension 처리
-- 기존 `documentContent` 전체를 system prompt에 붙이는 code path
-- Electron `preload`, `ipcMain`, `ipcRenderer`와 window lifecycle code
-- electron-builder, electron-vite와 Electron custom protocol code
-- `better-sqlite3` native binding의 무검증 직접 복사
-
-### 1.3 App shell 정리
-
-1. product copy를 PDFie로 변경한다.
-2. toolbar와 welcome screen을 PDF 전용으로 바꾼다.
-3. main layout은 PDF surface + resizable AI sidebar를 유지한다.
-4. theme는 MD Reader와 동일한 light/sepia/dark 의미를 유지한다.
-5. sidebar component가 PDF store를 직접 읽지 않도록 message submit input을 typed contract로 바꾼다.
-6. `src/shared/rpc/ai-rpc.ts`에서 model listing, settings, streaming start/stop, chat session과 memory request/message schema를 정의한다.
-7. view는 `Electroview` RPC client만 사용하고 Bun service는 `BrowserView.defineRPC` handler 뒤에 둔다.
-8. Electron dialog/path/app APIs는 Electrobun `Utils`와 Bun-owned service로 바꾼다.
-9. app 종료 시 저장과 AI/worker cleanup은 Electrobun `before-quit` lifecycle에서 수행한다.
-
-### 1.4 Porting verification
-
-- model list가 로드된다.
-- AI provider settings가 저장된다.
-- streaming, stop, error가 동작한다.
-- chat session 저장과 복원이 동작한다.
-- sidebar width와 font size가 복구된다.
-- PDF를 열지 않아도 sidebar 오류로 app이 crash하지 않는다.
-- RPC payload validation 실패가 Bun process crash로 이어지지 않는다.
-- stable packaged app에서 provider settings와 chat persistence가 복구된다.
-
-### Exit criteria
-
-- [ ] Markdown/EPUB dependency가 PDFie runtime에 없음
-- [ ] MD Reader AI sidebar 동작 parity checklist 통과
-- [ ] AI service와 main view 사이 typed RPC 유지
-- [ ] Electron runtime, preload와 IPC dependency가 PDFie에 없음
-- [ ] Bun-owned persistence가 `Utils.paths.userData` 아래에서 동작
-- [ ] build, typecheck, tests 통과
-
-권장 commit: `feat: scaffold PDFie with the MD Reader AI shell`
-
-## 💾 Phase 2 — PDF identity, source bridge, domain과 persistence
-
-### 목적
-
-viewer와 AI가 공유할 안정적인 PDF identity와 재시작 가능한 상태를 만든다.
-
-### 2.1 Shared types
-
-다음 파일을 먼저 작성한다.
-
-- `src/shared/pdf/domain.ts`
-- `src/shared/pdf/rpc.ts`
-- `src/shared/pdf/classification.ts`
-- `src/shared/pdf/context-types.ts`
-
-`PRD.md`의 type을 그대로 옮기되 view-only instance와 RPC DTO를 구분한다. 모든 RPC payload는 serializer가 지원하는 명시적 DTO만 사용하고 `File`, DOM node, viewer plugin instance, database row object와 raw filesystem path를 넘기지 않는다.
-
-### 2.2 Document open service
-
-1. Bun process에서 Electrobun `Utils.openFileDialog`를 사용해 `.pdf`만 허용하는 open dialog를 만든다.
-2. file stat과 magic bytes를 검증한다.
-3. stream으로 SHA-256을 계산한다.
-4. cryptographically random한 `documentId`를 발급하고 path mapping을 Bun memory에 둔다.
-5. Phase 0에서 확정한 `PdfSourceBridge`를 구현하고 viewer에는 source descriptor만 반환한다.
-6. loopback source server를 선택했다면 `127.0.0.1` bind, per-launch secret, document allowlist, range request, origin/CSP 제한과 shutdown close를 구현한다.
-7. RPC Blob 방식을 선택했다면 300페이지 fixture의 memory budget을 회귀 테스트하고 사용이 끝난 Blob URL을 revoke한다.
-8. close 시 mapping과 token을 정리하되 최근 문서 path는 Bun-owned persistence에 저장한다.
-
-### 2.3 Persistence schema
-
-기존 chat DB와 충돌하지 않는 migration으로 다음 logical table을 만든다.
-
-```text
-pdf_documents
-  document_hash PK
-  last_path
-  file_name
-  page_count
-  document_type
-  document_type_confidence
-  document_type_source
-  classification_evidence_json
-  extraction_mode
-  structure_mode
-  analysis_version
-  current_page
-  zoom
-  rotation
-  updated_at
-
-pdf_semantic_units
-  document_hash
-  unit_id
-  kind
-  title
-  parent_title
-  page_start
-  page_end
-  source
-  sort_order
-```
-
-기본 DB adapter는 Bun runtime에 맞는 SQLite implementation을 사용한다. MD Reader의 `better-sqlite3` 호출을 view나 service에 흩뜨리지 말고 `DocumentRepository`, `ChatRepository`, `SettingsRepository` interface 뒤에 둔다. native binding을 선택하려면 stable packaged app에서 load가 검증되어야 한다.
-
-chunk 본문은 SQLite blob에 넣지 않고 `Utils.paths.userData` 아래 versioned cache file에 둔다. migration은 idempotent해야 하며 legacy chat table을 삭제하지 않는다.
-
-### 2.4 Store
-
-`usePdfDocumentStore`는 tab UI state만 담당한다. file hash, persisted record와 analysis 결과는 Bun service가 source of truth다. 대용량 PDF bytes와 전체 document text를 Zustand에 넣지 않는다.
-
-### Tests
-
-- hash가 path와 무관하게 동일함
-- magic-byte가 아닌 가짜 `.pdf` 거부
-- source bridge의 path traversal, 잘못된 document ID와 token 거부
-- 같은 PDF 재열기 시 tab/cache 재사용
-- migration 재실행 안전
-- restart 후 page/zoom/type 복원
-
-### Exit criteria
-
-- [ ] document identity가 SHA-256 기반
-- [ ] main view가 raw filesystem API와 raw PDF path를 사용하지 않음
-- [ ] PDF bytes를 base64로 Zustand에 저장하지 않음
-- [ ] source bridge가 app 종료 시 listener, token과 Blob resource를 정리함
-- [ ] persistence integration test 통과
-
-권장 commit: `feat: add secure PDF identity and persistent document state`
-
-## 📚 Phase 3 — Production viewer adapter
-
-### 목적
-
-Phase 0의 승자를 정식 adapter로 격리하고 PDFie chrome에 연결한다.
-
-### 3.1 Adapter 구현
-
-다음을 구현한다.
-
-- `PdfViewerAdapter` interface
-- 선정 viewer adapter
-- selection normalizer
-- bookmark normalizer
-- active-page subscription
-- page text accessor
-- page/bbox navigation
-
-viewer library의 raw store나 plugin type은 adapter 디렉터리 밖으로 export하지 않는다.
-
-### 3.2 Reader UI
-
-최소 component:
-
-- `PdfReader.tsx`
-- `PdfToolbar.tsx`
-- `PdfNavigationRail.tsx`
-- `PdfSelectionMenu.tsx`
-- `PdfLoadingState.tsx`
-- `PdfErrorState.tsx`
-- `PdfStatus.tsx`
-
-selection menu는 native copy를 방해하지 않으며 selection이 확정된 뒤 나타난다. `Explain`, `Summarize`, `Ask AI`는 동일한 `PdfSelection` DTO를 사용한다.
-
-### 3.3 Reading progress
-
-- active page update를 debounce해 main persistence로 보낸다.
-- page가 chapter 경계를 넘으면 context switch event를 발생시킨다.
-- zoom과 rotation을 문서 hash별로 저장한다.
-- scroll 중 매 frame DB write를 하지 않는다.
-
-### Tests
-
-- adapter contract test
-- selection rect PDF coordinate 정규화
-- zoom/rotation 후 locator round trip
-- tab 전환 시 viewer instance cleanup
-- password/copy permission/no-text-layer state
-
-### Exit criteria
-
-- [ ] viewer-specific API가 adapter 밖에 새지 않음
-- [ ] golden selection suite가 정식 component에서도 통과
-- [ ] page/zoom/rotation 복원
-- [ ] long PDF tab close 후 resource 해제
-
-권장 commit: `feat: integrate the validated PDF viewer adapter`
-
-## 🔍 Phase 4 — Fast article/book classifier
-
-### 목적
-
-Docling 없이 빠른 facts만으로 routing을 결정하고 불확실성을 사용자에게 노출한다.
-
-### 4.1 Fast facts collector
-
-viewer adapter에서 다음만 요청한다.
-
-- metadata
-- page count
-- normalized outline
-- first 3 page text
-- final 20% 내 최대 3 page text
-- text item/printable ratio
-
-문서 전체 text를 classifier를 위해 선행 추출하지 않는다.
-
-### 4.2 Pure classifier
-
-`classifyPdfDocument(facts)`는 외부 상태 없이 다음을 반환한다.
-
-```ts
-interface ClassificationResult {
-  documentType: 'article' | 'book' | 'unknown'
-  confidence: number
-  articleScore: number
-  bookScore: number
-  evidence: Array<{ code: string; weight: number; detail?: string }>
+interface SourceBlock {
+  id: string; documentHash: string; indexRevision: string;
+  sectionId?: string; role: SourceRole; readingOrder: number;
+  rawText: string; normalizedText: string;
+  spans: SourceSpan[];
+  extraction: "native" | "ocr" | "layout-worker";
+  quality: "verified" | "usable" | "uncertain" | "unreadable";
 }
-```
 
-PRD scoring table을 초기 계약으로 구현한다. regex는 DOI, ISBN, heading label을 별도 module로 두고 multilingual fixture를 추가한다.
-
-### 4.3 User override
-
-- toolbar/status 영역에 `논문`, `책` control을 둔다.
-- confidence가 높으면 compact label로 표시한다.
-- `unknown` 또는 낮은 confidence면 눈에 띄되 읽기를 막지 않는 선택 control을 보인다.
-- 사용자가 변경하면 이전 derived structure를 invalidation하고 새 routing을 실행한다.
-- user override는 자동 재분석으로 덮어쓰지 않는다.
-
-### Corpus test
-
-저작권 문제가 없는 최소 20 article + 20 book corpus manifest를 만든다. PDF 자체를 commit할 수 없으면 local fixture path가 아닌 추출한 fast-facts JSON을 commit해 classifier regression에 사용한다.
-
-목표:
-
-- high-confidence auto result의 오분류율 5% 이하
-- ambiguous 문서는 잘못 확정하기보다 `unknown`
-- user override persistence 100%
-
-### Exit criteria
-
-- [ ] classifier unit tests와 corpus report 완료
-- [ ] Docling process를 시작하지 않고 판별
-- [ ] confidence/evidence 저장
-- [ ] unknown UI와 override persistence 동작
-
-권장 commit: `feat: route PDFs by article and book semantics`
-
-## 📚 Phase 5 — Bookmark book structure
-
-### 목적
-
-usable bookmark가 있는 book을 Docling 없이 semantic chapter로 구조화한다.
-
-### 5.1 Preppy hierarchy logic port
-
-`/Volumes/Aquatope/_DEV_/Preppy/PDF_CHAPTER_HIERARCHY.md`를 porting contract로 사용한다. 함수 하나만 복사하지 말고 다음 동작을 함께 옮긴다.
-
-- title normalization과 control character 제거
-- outline tree 구축
-- frontmatter/backmatter classification
-- Part/Book/Volume/Unit/Roman numeral container 판별
-- mixed depth child chapter 선택
-- oversized content node guardrail
-- parent title과 outline level 보존
-- selected semantic unit의 page range 계산
-
-Docling item mapping과 Markdown slicing은 bookmark-only path에 가져오지 않는다.
-
-### 5.2 Usability validator
-
-반드시 별도 pure function으로 만든다.
-
-```ts
-validateOutline(outline, pageCount): {
-  usable: boolean
-  reasons: string[]
-  units: PdfSemanticUnit[]
+interface EvidenceRef {
+  id: string; documentHash: string; indexRevision: string;
+  blockIds: string[]; quote: string; spans: SourceSpan[];
+  precision: "text-range" | "paragraph" | "region" | "page-only";
 }
-```
 
-외부 URI, destination 해석 실패, 중복/역행 page, container-only tree, 낮은 coverage를 fixture로 검증한다.
-
-### 5.3 Page lookup
-
-정렬된 semantic unit으로 `pageNumber → unitId` binary lookup을 만든다. frontmatter page는 첫 chapter로 거짓 귀속하지 말고 `null` 또는 frontmatter unit을 반환한다.
-
-### 5.4 Navigation과 chat context
-
-- outline click은 viewer adapter를 통해 이동한다.
-- active page가 새 semantic chapter로 들어가면 chat context key를 바꾼다.
-- Part는 rail grouping label이며 기본 chat session owner가 아니다.
-
-### Exit criteria
-
-- [ ] nested Part → Chapter fixture 통과
-- [ ] Notes/Index가 기본 chapter로 선택되지 않음
-- [ ] usable outline book에서 worker spawn이 0회
-- [ ] page lookup과 chat context switch 통과
-
-권장 commit: `feat: derive book chapters from PDF bookmarks`
-
-## 📚 Phase 6 — Native text index와 article mode
-
-### 목적
-
-article과 bookmark book에서 Docling 없이 AI context에 사용할 page-aware chunk index를 만든다.
-
-### 6.1 Native text quality gate
-
-page별로 다음을 측정한다.
-
-- text item 존재 여부
-- printable character 비율
-- replacement/control character 비율
-- 극단적으로 긴 무공백 token
-- column reading-order anomaly의 보수적 signal
-- image-only page 비율
-
-결과는 `native-ok`, `needs-docling`, `needs-ocr`, `restricted`로 분류하고 diagnostics에 근거를 기록한다.
-
-### 6.2 Article unit
-
-- `pageStart = 1`, `pageEnd = pageCount`인 단일 article unit을 만든다.
-- heading은 chunk metadata일 뿐 chat session 경계가 아니다.
-- late References heading을 찾으면 기본 retrieval index에서 이후 chunk를 제외한다.
-- References 원문을 삭제하지 않고 별도 excluded flag로 보존한다.
-
-### 6.3 Native chunking
-
-1. page text item의 reading order를 viewer engine 결과에서 얻는다.
-2. heading path와 page locator를 유지한다.
-3. paragraph boundary를 우선하고 token budget에서만 분할한다.
-4. 너무 작은 peer chunk는 같은 heading 아래에서만 병합한다.
-5. stable chunk ID를 만든다.
-6. `chunks-v1.jsonl`에 atomic write한다.
-
-초기 chunk 목표는 400–900 tokens이며 heading, table 또는 page boundary를 무조건 깨서 숫자를 맞추지 않는다.
-
-### Tests
-
-- article은 정확히 하나의 chat semantic unit
-- section 이동에도 같은 chat key
-- References 기본 제외와 명시 검색 가능
-- Korean/English paragraph chunking
-- cache atomic write와 corruption recovery
-
-### Exit criteria
-
-- [ ] native article에서 Docling spawn 0회
-- [ ] bookmark book도 native chunk index 생성 가능
-- [ ] 모든 chunk에 page provenance 존재
-- [ ] article session이 section 이동에서 유지됨
-
-권장 commit: `feat: build native page-aware article and book indexes`
-
-## 💬 Phase 7 — AI context assembler와 citation navigation
-
-### 목적
-
-MD Reader의 전체 `documentContent` 주입을 구조화된 PDF context로 교체한다.
-
-### 7.1 Context request contract
-
-```ts
-interface PdfContextRequest {
-  documentHash: string
-  contextKey: string
-  question: string
-  activePage: number
-  selection: PdfSelection | null
-  semanticUnitId: string | null
-  modelContextWindow?: number
+interface Section {
+  id: string; parentId?: string; title: string;
+  startBlockId: string; endBlockId: string;
+  source: "bookmark" | "native-heading" | "layout-worker" | "user";
+  confidence: number; userEdited: boolean;
 }
-```
 
-### 7.2 Assembler algorithm
+interface AnswerBlock {
+  id: string; markdown: string; evidenceIds: string[];
+  kind: "document-claim" | "inference" | "background" | "illustration" | "unknown";
+}
 
-1. selection을 source 0으로 추가한다.
-2. 선택 주변 또는 active page 주변 chunk를 추가한다.
-3. 현재 article/chapter 안에서 lexical retrieval을 수행한다.
-4. 질문이 전체 문서 비교를 명시할 때만 global retrieval을 허용한다.
-5. 중복 text를 제거한다.
-6. token budget을 넘으면 낮은 score source부터 제거한다.
-7. source ID와 page metadata를 포함한 prompt section을 만든다.
+interface LessonSpec {
+  schemaVersion: 1; id: string; scopeId: string;
+  title: string; objectives: string[]; prerequisiteConcepts: string[];
+  evidenceIds: string[]; steps: LessonStep[];
+  assumptions: string[]; dataKind: "paper" | "illustrative" | "none";
+}
+~~~
 
-MVP retrieval은 deterministic local lexical search로 시작한다. embedding/RAG는 별도 성능 근거 없이 먼저 도입하지 않는다.
+LessonStep은 explanation / diagram / prediction / parameter-experiment / quiz의 discriminated union으로 구현한다. 각 variant는 필요한 필드를 강제한다. 예를 들어 parameter-experiment는 허용된 rendererId, 유한한 min/max/step/default, 단위, fixed formula ID를 요구한다. quiz는 정답 또는 평가 rubric, feedback, evidenceIds를 요구한다.
 
-### 7.3 Chat store 변경
+PDF engine character index와 JavaScript 문자열 offset이 일치한다고 가정하지 않는다. ligature, 한글 정규화, 결합 문자, 하이픈 제거를 포함해 raw→normalized→engine span mapping을 보존한다. OCR에는 engineRange가 없어도 된다.
 
-- `sendMessage({ documentContent })`를 제거하거나 PDF path에서 사용하지 못하게 한다.
-- `sendMessage({ contextBundle })` 형태로 명시한다.
-- streaming 시작 시 context key를 snapshot한다.
-- streaming 중 page/chapter가 바뀌어도 완료 메시지는 snapshot session에 저장한다.
-- selection 원문 언어를 prompt instruction에 반영한다.
+### 4.3 좌표 변환
 
-### 7.4 Citation UI
+표준 좌표는 unrotated CropBox의 좌상단 기준 PDF points로 정한다. 이것은 PDF raw user space나 현재 EmbedPDF 값과 같다고 가정하는 선언이 아니다. P0에서 engine/view/OCR의 frame을 확인하여 adapter에서 명시 변환한다.
 
-- 모델 응답의 자유 형식 page 숫자를 신뢰하지 않는다.
-- 전달한 source ID에 대응하는 citation chip만 interactive하게 만든다.
-- chip click은 `goToPage` 후 bbox overlay를 잠시 표시한다.
-- bbox가 없으면 page top으로 이동한다.
+변환 경로:
 
-### Tests
+~~~text
+pointer/CSS 좌표
+ → page-local CSS (scroll·page offset·devicePixelRatio 구분)
+ → inverse zoom/rotation/box transform
+ → canonical rect
+ → renderer 또는 OCR frame
+~~~
 
-- priority ordering
-- budget truncation
-- duplicate elimination
-- cross-chapter global retrieval opt-in
-- selection language preservation
-- streaming race와 context snapshot
-- invalid source ID 무시
+reveal 경로에는 반대 변환을 적용한다. intrinsic page rotation과 사용자 회전을 따로 관리한다. MediaBox/CropBox 원점, page label, 90/180/270도, 양면 layout, 여러 page fragment를 fixture에 포함한다.
 
-### Exit criteria
+기존 저장 주석은 legacy frame/version을 부여한 adapter로 읽는다. 기존 숫자를 새 frame으로 재해석하거나 마이그레이션하며 이동시키지 않는다. source rect는 CSS scale 적용 직전에만 화면 좌표로 바꾼다.
 
-- [ ] 전체 document/chapter 무조건 주입 code가 없음
-- [ ] selection이 항상 첫 source
-- [ ] context budget test 통과
-- [ ] citation click이 page/bbox로 이동
-- [ ] chapter 전환 중 streaming race test 통과
+### 4.4 저장
 
-권장 commit: `feat: assemble page-aware AI context for PDFs`
+새 학습 데이터에는 Bun 내장 SQLite를 우선 제안한다. 기존 읽기/주석 JSON은 초기에는 유지하여 위험한 전면 이관을 피한다.
 
-## ⚙️ Phase 8 — Preppy/Docling fallback worker
+주요 table:
 
-### 목적
+| table | 주요 내용 |
+| --- | --- |
+| documents / index_revisions / page_jobs | 문서, 버전, 페이지별 상태·재시도 |
+| sections / blocks / spans / blocks_fts | 구조·원문·좌표·검색 |
+| evidence_snapshots | 답변이 참조한 불변 근거 |
+| sessions / messages / answer_blocks | 문서·범위별 대화, interrupted 상태 |
+| goals / goal_revisions / goal_progress | 편집본·분석본·탐색 상태 |
+| lessons / lesson_progress / assessment_attempts | spec·현재 단계·사용자 답·rubric |
+| capture_assets / generation_jobs | image metadata·작업 상태 |
+| schema_migrations | 버전·이관 결과 |
 
-bookmark 또는 native text로 충분하지 않은 문서만 background worker로 분석한다.
+문서 hash와 revision을 foreign key 관계로 검증한다. transaction, WAL, backup, 원자적 asset write, schema migration 재실행 안전성을 적용한다. FTS5 미지원 packaged runtime에서는 우선 SQLite 일반 table + 제한된 in-memory lexical 검색으로 축소하고 지원 상태를 기록한다.
 
-### 8.1 재사용 전략
+이미지는 userData 아래 전용 asset directory에 저장한다. DB에는 opaque asset ID와 hash, MIME, 크기, source rect만 둔다. 임의 경로를 renderer에서 받지 않는다.
 
-Preppy 전체 source를 무기한 복제하지 않는다. 다음 중 하나를 명시적으로 결정하고 decision note를 남긴다.
+cache key에는 scope, document/index revision, provider/model, language, prompt/spec version을 포함한다. 사용자 편집본은 생성 cache와 분리한다. 미참조 임시 asset은 24시간 후, 취소된 미저장 asset은 즉시 정리하는 초기 정책을 제안한다. 저장한 대화·학습의 asset은 기록 삭제 전까지 유지한다. 문서 기록 삭제는 참조 확인 후 연관 데이터와 asset을 정리하며 원본 PDF는 삭제하지 않는다.
 
-1. PDFie에 version-pinned Python package로 포함
-2. 필요한 module을 vendoring하고 upstream commit을 기록
-3. 별도 worker bundle로 packaging
+기존 AI 설정 이관은 backup → schema 검사 → provider=ollama-cloud 지정 → 새 파일 원자 저장 → 읽기 확인 순서로 수행한다. 기존 key는 검증 전 삭제하지 않는다. 현재 키 파일 암호화는 Keychain과 같은 보안 경계가 아니므로 Keychain 저장을 검토하되 인증·복구 검증을 별도 단계로 둔다.
 
-어느 안이든 Preppy version/commit과 cache `analysisVersion`을 함께 기록한다.
+## 5. PDF 분석과 검색
 
-Python runtime은 개발자 machine의 `.venv`, Homebrew Python 또는 interactive shell PATH에 의존하지 않는다. `/Volumes/Aquatope/_DEV_/Interactive_Learning/scripts/prepare-python-runtime.ts`와 `python/.bundle/<platform>/runtime` layout을 기준으로 PDFie 전용 self-contained runtime을 준비하고, Electrobun `build.copy`로 stable artifact에 포함한다. `.venv/bin/python`이 외부 절대 경로 symlink인지 확인하지 않고 복사하는 방식은 금지한다.
+### 5.1 추출 위치
 
-### 8.2 PDFie용 Preppy contract 보강
+1차 구현은 이미 PDF를 연 renderer의 PDFium worker를 analysis adapter가 사용한다. native engine을 Bun에 새로 포팅하거나 문서 전체를 RPC로 왕복시키지 않는다.
 
-현재 Preppy 결과를 바로 신뢰하기 전에 다음을 제공해야 한다.
+- getPageGeometry/getTextSlices의 설치 버전 계약을 wrapper로 감싼다.
+- 기존 getCoreDocument 접근은 내부 의존성이 있으므로 한 adapter에 격리하고 실패 상태를 명확히 한다.
+- visible page/선택 범위를 우선하고, 나머지는 낮은 우선순위의 bounded queue에서 처리한다.
+- 페이지 단위 원문·geometry를 bounded batch로 Bun에 전송한다. 검증·저장·검색·생성은 Bun이 소유한다.
+- 문서 close 시 pending PDF tasks를 취소하고 진행 상태를 checkpoint한다.
+- 색인이 partial이면 전체 문서 질문에 coverage 제한을 표시한다.
 
-- outline-derived chapter의 `page_end`
-- heading뿐 아니라 AI chunk에 필요한 paragraph/table/caption item
-- page와 bbox provenance
-- stable chunk IDs
-- page-to-chapter lookup 가능한 reader index
-- progress event와 cancellation
+초기 batch 상한은 256KB, 페이지 분석 동시성은 1로 시작하고 P0에서 조정한다. 320페이지의 모든 glyph geometry를 React state에 계속 보관하지 않는다. 저장 후 필요한 page geometry만 LRU cache로 유지한다.
 
-Preppy 자체를 수정해야 한다면 변경은 `/Volumes/Aquatope/_DEV_/Preppy` working tree에 직접 하지 않는다. 먼저 PDFie에서 필요한 adapter/schema를 작성하고, upstream 변경이 필요하다는 근거와 별도 작업 범위를 사용자에게 보고한다.
+신뢰 경계에서 Bun은 열린 문서 ID→hash를 직접 확인하며 page range, rect 범위, 문자열 길이, revision, message size를 검증한다. viewer가 보내는 file path를 실행하거나 그대로 파일 시스템에 전달하지 않는다.
 
-### 8.3 Worker lifecycle
+### 5.2 문단과 섹션 구성
 
-- 한 hash당 하나의 job만 실행
-- queued/running/completed/failed/cancelled 상태
-- typed RPC message로 전달하는 structured progress
-- explicit timeout
-- cancellation에서 child tree 종료
-- stdout/stderr size 제한과 secret redaction
-- temporary output 후 atomic rename
-- `Bun.spawn`에 명시적인 executable, `cwd`, `PATH`, `PYTHONPATH`와 environment 전달
-- dev와 packaged mode의 runtime/resource 후보 경로 분리
-- writable output과 environment는 `Utils.paths.userData` 아래에 배치
-- Electrobun `before-quit`에서 app shutdown cleanup
+native geometry에서 column → line → paragraph 순으로 묶는다. 수직 간격·들여쓰기·font size·문장 연속성을 함께 사용하고 y 좌표만 정렬하지 않는다.
 
-packaged worker resolver는 다음 순서를 갖는다.
+- 반복 header/footer는 여러 페이지에서 탐지하고 role만 변경한다.
+- 표·수식·캡션은 일반 본문과 분리한다.
+- 다중 페이지 문단은 텍스트 연속성과 column 경계를 확인한 경우만 연결한다.
+- heading은 북마크와 typography·번호 패턴으로 제안한다.
+- LLM은 실제 block 후보의 분류/제목 보정만 할 수 있고 가짜 경계나 좌표를 생성하지 않는다.
+- section의 끝은 다음 section 직전 block이다. pageEnd만으로 잘라 같은 페이지의 다음 section을 포함하지 않는다.
 
-1. app bundle에 복사된 `python/.bundle/<platform>/runtime/bin/python3`
-2. 명시적인 PDFie 개발 runtime
-3. 개발 모드에서만 허용한 `uv run` fallback
+text density, printable ratio, Unicode 이상, column 혼합, 빈 페이지를 quality 진단에 포함한다. scanned-image fixture는 자동 성공이 아니라 OCR 필요 상태가 나와야 통과다.
 
-production stable app에서는 3번 fallback이 실행되면 실패로 취급한다. `process.cwd()`만으로 worker root를 찾지 않으며, resource 후보를 중앙 `resolveBundledResource()` helper에서 계산한다.
+### 5.3 OCR/layout fallback
 
-### 8.4 Routing matrix
+R1은 native text가 usable인 PDF를 우선한다. OCR이 필요한 페이지는 읽기를 막지 않으며 선택 crop으로 질문할 수 있다.
 
-| Document | Structure | Text | Worker 역할 |
-| --- | --- | --- | --- |
-| Article | 단일 문서 | 정상 | 실행 안 함 |
-| Article | 단일 문서 | 불량 | text/figure/table extraction |
-| Book | bookmark 정상 | 정상 | 실행 안 함 |
-| Book | bookmark 정상 | 불량 | text extraction만, 경계 유지 |
-| Book | bookmark 없음 | 정상/불량 | chapter detection + extraction |
-| Unknown | 미결정 | 불량 | 사용자 유형 결정 전 실행 안 함 |
+P0에서는 로컬 OCR/layout 후보 하나를 샘플 평가한다. Docling 등 Python worker를 넣는 결정은 정확성 개선, arm64 의존성, 배포 크기, cold start, restricted PATH에서 bundled 실행 가능성을 확인한 뒤 별도 ADR로 확정한다. 기존 문서에 적혀 있다는 이유로 이미 동작한다고 가정하지 않는다.
 
-### 8.5 Result adapter
+worker 출력은 동일 SourceBlock/SourceSpan으로 변환한다. OCR image-pixel 좌표를 canonical PDF 좌표로 역변환하고 confidence를 보존한다. 암호·복사 권한 제한을 OCR 우회로로 처리하지 않는다.
 
-Preppy manifest/document/chunks를 PDFie `PdfSemanticUnit`과 `PdfTextChunk`로 변환한다. 원본 Preppy artifact를 cache에 보존하되 main view는 직접 읽지 않는다.
+### 5.4 검색·context assembly
 
-### Tests
+기본은 로컬 lexical/FTS5 검색 + section/selection boost다. 벡터 DB와 외부 embedding 호출은 MVP 필수 의존성이 아니다.
 
-- duplicate job suppression
-- progress/cancel/timeout
-- invalid JSON/schema rejection
-- partial output cleanup
-- bookmark boundary 유지 + Docling text 조합
-- app shutdown orphan check
-- restricted `PATH=/usr/bin:/bin`에서 bundled interpreter와 Preppy import smoke
-- packaged `.app.tar.zst` 또는 실제 `.app` 내부 runtime/package 존재 확인
+한국어 질문–영어 원문을 위해 논문 용어 사전과 제한된 query expansion을 사용한다. LLM expansion을 쓰면 현재 선택 provider와 job budget을 공유하고 원 질문을 보존한다. 비교 평가에서 recall이 부족할 때만 로컬 multilingual embedding을 추가한다.
 
-### Exit criteria
+context 우선순위: 사용자가 선택한 원문/crop → 관련 이웃·캡션 → 선택 section 검색 → 허용된 문서 범위의 다른 근거. section 밖 근거를 사용할 때 scope expansion을 표시한다.
 
-- [ ] native fast path에서 Python process 0회
-- [ ] fallback 결과가 PDFie schema로 검증됨
-- [ ] cancel/timeout/orphan process tests 통과
-- [ ] clean environment에서 bundled Python/Preppy가 system Python 없이 실행됨
-- [ ] 실패 후 native reading 유지
+최대 context의 초기 예산은 source 35%, output reserve 30%, 나머지 system/history/여유로 배정한다. 실제 model window와 tokenizer를 우선하고 알 수 없으면 보수적으로 추정한다. 큰 선택 구절을 조용히 잘라내지 말고 분할 작업을 제안한다.
 
-권장 commit: `feat: add cached Preppy fallback analysis`
+대화 history는 문서 근거와 별도 구역이다. 이전 AI 답변을 새 사실의 출처로 쓰지 않는다. 전체 요약·목표 생성은 상위 검색 결과만으로 전체 coverage를 가장하지 않고 section별 map→reduce와 처리 block 목록을 사용한다.
 
-## 🏠 Phase 9 — UX state와 polish
+## 6. 답변과 인용 이동
 
-### 목적
+Bun의 ContextAssembler가 후보 근거를 evidence ID로 등록하고 모델에 전달한다. 응답의 AnswerBlock.evidenceIds는 이 turn에 허용된 집합에 속해야 한다.
 
-기술 상태를 읽기 흐름을 방해하지 않는 명확한 UI로 표현한다.
+검증 순서:
 
-### 9.1 상태 UI
+1. JSON/schema 또는 안전한 citation marker 문법 검사.
+2. evidence ID의 allowlist, hash, revision, scope 확인.
+3. quote와 raw text range/정규화 mapping 확인.
+4. 숫자·페이지·rect의 유효 범위 확인.
+5. 없는 인용은 unresolved로 처리하고 한 차례 제한된 수정 요청 또는 근거 부족 응답.
+6. answer/evidence snapshot을 함께 transaction으로 저장.
 
-다음 상태를 각각 fixture 또는 story로 재현한다.
+모델의 semantic entailment까지 위 validator가 보장하지 않는다. 표본 평가에서 사람 심사를 수행한다. 자동 지지 여부 평가는 추가 신호이며 자체 정확도 보증이 아니다.
 
-- empty/recent files
-- loading first page
-- classifying
-- article ready
-- bookmark book ready
-- unknown type
-- Docling queued/running/completed
-- Docling failed
-- no text layer
-- password required
-- copy restricted
-- corrupt PDF
+streaming은 draft text와 최종 structured blocks를 구분한다. 최종 validation 전에는 citation을 비활성으로 표시한다. 실패해도 draft는 보관하되 verified answer로 승격하지 않는다.
 
-### 9.2 Layout parity
+viewer adapter contract:
 
-- MD Reader의 AI sidebar width, typography, streaming layout을 유지한다.
-- PDF viewer 기본 toolbar를 그대로 중복 표시하지 않는다.
-- 일치 구절을 표시하는 search/bookmark rail과 AI sidebar가 좁은 창에서 충돌하지 않게 한다.
-- 중요하지 않은 분석 세부사항은 status popover에 progressive disclosure한다.
-- 모든 상태를 card 안에 넣거나 modal로 차단하지 않는다.
+~~~ts
+interface EvidenceViewer {
+  revealEvidence(ref: EvidenceRef): Promise<
+    { status: "exact" | "approximate" | "unresolved"; reason?: string }
+  >;
+  clearEvidenceHighlight(): void;
+  returnToReadingPosition(): void;
+}
+~~~
 
-### 9.3 Accessibility와 keyboard
+기존 getSearchResultScrollTarget/scrollToPage의 pageCoordinates 경로를 재사용한다. 대상 page mount/render가 완료된 후 overlay를 표시한다. 빠른 연속 클릭은 최신 navigation request만 적용한다. 다중 page fragment에는 다음/이전 근거 위치를 제공한다.
 
-PRD shortcut을 구현하고 layout-independent key를 사용한다. Electrobun `ApplicationMenu`에 role-based Edit menu의 undo, redo, cut, copy, paste, delete와 select-all을 정의해 macOS native shortcut이 PDF selection과 입력창에서 모두 동작하게 한다. focus trap은 password dialog처럼 modal 의미가 실제로 있는 곳에만 사용한다. selection menu와 citation overlay는 keyboard와 screen reader label을 제공한다.
+selection·search match·saved highlight·AI evidence overlay는 별도 상태다. AI 강조를 영구 주석 배열에 append하지 않는다. 원문으로 이동해도 chat focus/scroll을 잃지 않도록 이전 상태를 복원한다.
 
-### Exit criteria
+## 7. AI transport·provider 계약
 
-- [ ] 모든 key state가 명시적으로 렌더링됨
-- [ ] keyboard-only core reading/AI flow 통과
-- [ ] light/sepia/dark visual QA 통과
-- [ ] reduced-motion QA 통과
-- [ ] 1024px 폭에서도 reader와 sidebar 사용 가능
+### 7.1 공통 서비스
 
-권장 commit: `feat: complete PDF reading states and accessibility`
+~~~ts
+type ProviderId = "ollama-cloud" | "codex-subscription" | "claude-code" | "api";
 
-## 🔐 Phase 10 — Security와 production packaging
+interface ModelCapabilities {
+  text: boolean; image: boolean;
+  structuredOutput: "native" | "validated-text" | "unsupported";
+  contextWindow?: number;
+}
 
-### 목적
+interface GenerationRequest {
+  jobId: string; documentHash: string; sessionId: string;
+  task: "chat" | "goals" | "summary" | "lesson" | "assessment";
+  scopeId: string; evidenceIds: string[];
+  modelId: string; history: unknown[]; input: unknown[];
+  outputSchema?: unknown;
+}
 
-development shell 밖의 실제 `.app`에서 안전하게 동작하도록 한다.
+interface ProviderAdapter {
+  status(): Promise<unknown>;
+  models(): Promise<unknown[]>;
+  generate(request: GenerationRequest, signal: AbortSignal): AsyncIterable<unknown>;
+}
+~~~
 
-### 10.1 Electrobun hardening
+실제 구현은 unknown을 검증된 DTO/union으로 구체화한다. API-key settings와 구독 연결을 discriminated union으로 분리한다. history의 권위는 앱에 두고 provider persistent history와 중복 전송하지 않는다.
 
-- main view는 trusted bundled `views://main/index.html`만 연다.
-- main view에서 Bun filesystem, process, DB와 child-process API를 직접 사용할 수 없게 dependency boundary test를 둔다.
-- Bun/view 통신은 shared schema의 typed allowlisted RPC만 사용하고 handler에서 runtime validation을 수행한다.
-- `setNavigationRules`는 remote navigation과 new-window를 deny by default로 제한한다.
-- 외부 링크는 URL scheme과 host를 검증한 뒤 명시적 사용자 동작에서만 `Utils.openExternal`로 연다.
-- untrusted remote content가 필요해지면 main view에 직접 load하지 않고 별도 sandboxed view와 partition을 사용한다.
-- source bridge의 document ID, token, range와 origin을 검증한다.
-- PDF JavaScript action, launch action과 임의 attachment 실행을 허용하지 않는다.
-- API key, source token, raw PDF path와 PDF 본문을 log에서 redaction한다.
-- 종료 cleanup은 async 작업이 가능한 Electrobun `before-quit`에서 수행한다.
+기존 ai.chatStream은 RPC가 응답 완료까지 기다리고 maxRequestTime=60초에 묶여 있다. 장시간 학습 생성에는 다음 형태로 변경한다.
 
-### 10.2 Asset packaging
+- ai.start → 즉시 jobId 반환.
+- ai.event → jobId/documentHash/sessionId/sequence/type을 갖는 stream event.
+- ai.cancel → queue 취소 또는 실제 turn interrupt.
+- ai.jobStatus → reconnect 시 last sequence 이후 복구.
+- completed/failed/cancelled는 중복 도착해도 한 번만 적용.
 
-선정 viewer에 따라 다음을 명시적으로 package한다.
+초기에는 provider별 활성 생성 1개, background queue 1개, 사용자 작업 우선으로 시작한다. 작업별 input hash로 중복 실행을 막고 재시도 최대 1회로 제한한다. quota/auth 실패는 자동 재시도하지 않는다. 유료 호출을 늘리는 repair는 동일 budget 안에서 처리하고 이력을 남긴다.
 
-- PDFium WASM 또는 PDF.js worker
-- CMap, standard fonts
-- viewer CSS
-- self-contained Preppy/Python runtime와 model/assets
-- migrations
+### 7.2 Codex ChatGPT 구독
 
-`electrobun.config.ts`의 `build.copy` destination은 한 곳에서 관리하고 WASM, worker, font, Python runtime와 migration마다 source/destination manifest test를 둔다. resource path는 `process.cwd()`나 interactive shell PATH에 의존하지 않고 PDFie의 `resolveBundledResource()`가 dev/stable 후보를 명시적으로 계산한다. stable artifact는 `.app`, DMG와 `.app.tar.zst`의 실제 layout을 검사하며 resource directory가 항상 평평하게 unpack되어 있다고 가정하지 않는다.
+공식 [App Server](https://developers.openai.com/codex/app-server)와 설치 schema를 사용한다. 구현 시 적용하는 [codex-subscription-provider 스킬](/Users/anselm/.agents/skills/codex-subscription-provider/SKILL.md)의 인증·한도·검증 계약을 따른다.
 
-macOS stable config는 code signing과 notarization을 release gate에 포함한다. runtime ADR이 Electrobun native를 확정했다면 config와 artifact 검사에서 CEF가 없음을 확인한다.
+- backend가 공식 실행 파일을 발견하고 version/지원 계약을 확인한다. shell 문자열로 실행하지 않는다.
+- userData 아래 app-private Codex home과 빈 scratch cwd를 사용한다. 일반 Codex 설정·인증 파일을 복사하지 않는다.
+- environment allowlist를 사용하고 API keys, access-token override, 다른 provider endpoint, runtime injection 변수를 상속하지 않는다.
+- initialize → initialized → account/read → 공식 login flow → account/model/usage 확인 순으로 연결한다.
+- account/login/start·cancel·logout은 backend가 소유하고 renderer에는 공개 상태만 전달한다.
+- model/list는 pagination·계정 default·inputModalities를 처리한다. 앱에 특정 GPT 모델명을 고정하지 않는다.
+- generation은 ephemeral thread에 앱 history와 선택 근거를 한 번만 넣는다. turn/start의 출력 schema와 image input은 설치 schema로 검증한다.
+- thread/turn/item ID로 stream을 필터링하고 turn completion을 확인한다. item 최종 text의 중복 append를 막는다.
+- interrupt 실패 시 bounded grace 후 해당 소유 process를 정리한다. 재연결 시 이전 process의 event가 새 작업을 닫지 못하게 한다.
 
-### 10.3 Packaged smoke matrix
+PDF assistant에는 shell, filesystem read/write, network tools, MCP, hooks, plugins, subagents가 필요 없다. 공식 설정과 protocol로 도구를 끄고 실제 model-visible tool 목록과 tool 요청 거절을 검증한다. read-only/approval never만 설정하고 완료 처리하지 않는다.
 
-| Scenario | Development | Packaged app |
+account/rateLimits/read의 ordinaryUsageAllowed·적용 bucket을 버전별로 해석한다. 알 수 없거나 소진된 구독 한도는 included-use 모드에서 차단한다. purchased credit 잔고를 included allowance로 해석하지 않는다. 로컬 preflight는 원자적 과금 상한이 아니므로 보장 범위는 “자동 유료 API 전환 없음”이다.
+
+### 7.3 Claude 구독 연결
+
+**확정 구현과 조건부 제안을 구분한다.** 현재 공식 문서에는 구독 사용 안내, 공식 binary에 사용자가 직접 로그인하는 경로, 자체 앱 로그인 제한이 함께 존재한다. PRD의 정책 분석과 출처를 유지한다.
+
+우선 후보는 사용자가 설치한 수정 없는 공식 Claude Code를 backend에서 실행하는 adapter다. PDFie 자체 OAuth client, 브라우저 cookie, 토큰 import, setup-token을 복사하는 UI는 만들지 않는다. 첫 연결은 공식 프로그램의 인증 흐름으로 안내하며 가능한 통합 UI의 범위는 P0에서 확인한다.
+
+[인증 문서](https://code.claude.com/docs/en/authentication)는 CLAUDE_CONFIG_DIR를 통한 별도 설정 경로를 설명한다. PDFie 전용 config와 scratch를 우선하되 Keychain·Console login의 분리 예외와 logout 영향을 실험한다. 독립성이 확인되지 않으면 다른 앱까지 로그아웃되는 기능을 만들지 않는다.
+
+[CLI](https://code.claude.com/docs/en/cli-reference)의 print, stream-json, json-schema, no-session-persistence를 후보로 검토한다. image는 공식 구조화 입력의 지원 형식을 확인하고 opaque asset의 검증된 bytes로 전달한다. 이미지 지원을 확인할 때까지 capability=image를 켜지 않는다.
+
+주의: 현재 [headless 문서](https://code.claude.com/docs/en/headless)의 bare mode는 구독 OAuth를 사용하지 않는다. 격리를 위해 bare를 켜고 구독 연결이라고 표시하면 안 된다. 대신 설치된 CLI의 restricted mode, tools의 빈 목록, strict MCP 설정, settings sources 제한을 조합하여 **구독 인증과 도구 차단이 동시에 유지되는지** 검증한다. 도구 제거와 hook/plugin/config 차단은 각각 확인한다.
+
+실행 환경에서 API key와 provider override를 제외하고 실제 인증 종류를 확인한다. 공식 client의 인증 선택지를 변조하지 않는다. API 인증으로 연결되면 구독이라고 표시하지 않고 실행 전에 별도 과금 경로임을 알린다.
+
+Codex와 같은 공개 quota RPC가 있다고 가정하지 않는다. 공식 status/오류에서 확인할 수 있는 범위만 노출하고 private usage endpoint에 토큰을 붙여 호출하지 않는다. 구독 limits와 API credits/extra usage를 구분할 수 없으면 그 제약을 UI에 표시한다. strict included-only 요청에 대한 보장이 불가능하면 실행을 차단한다.
+
+중지는 공식 interrupt 또는 SIGINT 우선, 제한 시간 후 소유 process cleanup으로 설계한다. 실제 종료와 partial result를 확인한다. 추정 cost 필드를 청구액으로 표시하지 않는다.
+
+SDK를 직접 포함하거나 binary를 bundle하는 방식은 별도 배포 조건·의존성 ADR을 통과한 후 결정한다. 조건이 불분명하면 공식 설명 또는 지원 답변을 근거로 해결하고 provider만 보류한다. API key 연결은 사용자가 명시적으로 선택할 수 있는 별도 경로로 남긴다.
+
+### 7.4 공통 설치·오류 처리
+
+Finder 실행의 제한된 PATH, executable 이동/업데이트, signed out, login 취소, 모델 삭제, process crash, malformed stream, UTF-8 chunk split, 한도 소진을 처리한다. prompt와 attachment를 보존한다.
+
+stdio buffer/frame에 상한과 deadline을 두고 stderr·OAuth URL·원문을 그대로 로그에 출력하지 않는다. 모든 process는 앱 종료 시 정리한다. 계정 로그인은 공식 브라우저에서 완료하며 renderer가 임의 URL이나 command를 실행할 수 없게 한다.
+
+## 8. 목표·요약·capture·학습 생성
+
+### 8.1 목표와 섹션 요약
+
+입력은 실제 section graph와 evidence packet이다. 목표 생성과 평가 rubric은 task별 schema를 둔다.
+
+- paper-level 목표는 각 section의 evidence-backed 개요를 모아 생성한다.
+- 원문 fact와 서술적 설명을 구분하고 evidence ID를 validation한다.
+- 단계별 processing coverage를 저장한다. 실패한 section만 재시도한다.
+- 사용자 편집 목표를 보존하고 새 제안은 diff로 제시한다.
+- section 경계 변경 시 관련 요약·학습은 stale 처리하고 기존 결과는 읽을 수 있게 둔다.
+
+### 8.2 Capture
+
+camera overlay가 CSS drag rect를 canonical rect로 바꾸고 PDF engine renderPageRect로 읽기 좋은 해상도의 PNG를 생성한다. native API 근거는 [공식 렌더 문서](https://www.embedpdf.com/docs/engines/rendering/render-page-rect) 및 설치 타입이다.
+
+초기 기준: 긴 변 최대 2048px, 파일 5MB, 요청당 4개까지. 모델별 더 낮은 제한이 있으면 적용한다. 작은 표는 정밀 crop을 추가하게 하고 조용히 과도하게 축소하지 않는다.
+
+Bun은 실제 MIME·decode·픽셀 수·해시·크기를 검증하고 opaque asset ID를 반환한다. 큰 base64를 반복 RPC로 옮기지 않도록 bounded upload 또는 기존 loopback bridge의 전용 ticket 경로를 비교한다. viewer source token과 외부 전송용 URL을 혼동하지 않는다.
+
+캡션 후보는 geometry 근접성 + figure/table label + 본문 참조로 선택한다. 연관 근거가 불확실하면 사용자가 확인할 수 있다. capture 자체는 region evidence이며 “문단 인용”과 구별된다.
+
+### 8.3 LessonSpec와 renderer
+
+생성은 (학습 의도·원문 근거 선택) → (LessonSpec) → (검증) → (로컬 renderer) 순으로 한다.
+
+허용 renderer catalog의 초기 범위:
+
+- step-diagram: host가 그리는 제한된 node/edge/label과 단계별 강조.
+- compare-predict: 두 조건·예측·설명.
+- scalar-experiment: 개발자가 검증한 계산 함수 ID, bounded parameters.
+- figure-walkthrough: 저장 capture의 허용 영역별 설명.
+- retrieval-quiz: 선택형·짧은 답변·rubric.
+
+SVG를 포함한 임의 markup, 외부 URL, JS 함수, npm import는 모델 출력으로 받지 않는다. 허용된 구조로 host가 SVG/HTML을 만든다. 과도한 단계·node·문자 수, NaN/Infinity, 수학적으로 잘못된 범위, 없는 asset/evidence를 거절한다.
+
+검증은 schema → evidence → parameter/units → render smoke → text overflow 순으로 한다. repair는 한 번, 실패하면 실행 가능한 학습 대신 원문 근거가 있는 일반 설명을 제공한다.
+
+MVP 이후 임의 생성 applet을 검토할 경우 별도 isolated WebView/process, bridge 없음, network deny, 외부 navigation/download 금지, CPU/메모리/time limit이 필요하다. native bridge가 있는 현재 앱 WebView의 iframe만으로 충분하다고 가정하지 않는다.
+
+### 8.4 이해 점검
+
+객관식은 local evaluator, 자유 답변은 selected provider의 근거 기반 rubric 평가를 쓴다. grading model과 lesson 생성 모델을 반드시 같게 만들 필요는 없으나 별도 호출 비용과 capability를 명시한다.
+
+점검 결과에는 rubric version, source revision, learner response, feedback, evidence를 저장한다. 사용자가 정답을 바로 열어본 경우와 스스로 답한 경우를 구분한다. goal explored는 사용 행동으로, 점검 통과는 평가 결과로 각각 갱신한다. 자동 평가는 이의 표시·재검토가 가능해야 한다.
+
+## 9. 단계별 작업과 종료 기준
+
+공수는 숙련된 구현자 1명이 개발·자동 검증·수동 QA를 수행할 때의 초기 범위다. 계정 인증 대기, 공식 정책 확인, 복잡한 OCR 패키징, 미지의 WebKit 문제는 제외하며 P0 후 갱신한다.
+
+| 단계 | 예상 작업일 | 결과 | 종료 기준 |
+| --- | ---: | --- | --- |
+| P0 기술 검증 | 3–5 | 증거 기록과 ADR | 아래 여섯 gate에 pass/fail·대안 |
+| P1 기반 | 3–5 | schema·store·jobs·provider interface | 이관·취소·문서 격리·crash 회복 |
+| P2 구독 provider | 5–8 | Codex + 조건 충족 Claude adapter | fake/실계정/앱 호출 구분 검증 |
+| P3 분석·좌표 | 5–8 | native blocks·sections·cache | reading order/anchor/coverage corpus |
+| P4 검색·인용 | 4–6 | grounded chat·citation navigation | AC-02~05, durable history |
+| P5 목표·요약 | 3–4 | editable goals·section summaries | AC-06~07, revision invalidation |
+| P6 capture·vision | 3–5 | crop·asset·multimodal explanation | AC-08, unsupported model 처리 |
+| P7 학습·점검 | 6–9 | templates·LessonPlayer·progress | AC-09~11, content/security review |
+| P8 통합·출시 QA | 4–6 | 설치 앱과 문서 정합성 | AC-01~15 적용 범위 통과 |
+
+합계 약 36–56 작업일, 순차 기준 약 7–11주. R1은 P0–P5와 해당 범위의 설치 앱 QA까지, R2는 P6–P8까지다. OCR의 완성형 배포와 자유 코드형 applet은 이 공수에 포함하지 않는다. 작은 계획 변경으로 끝나는 UI 작업이 아니라 문서 데이터·근거·학습 기반 확장이라는 점을 반영한 추정이다.
+
+### P0 상세 gate
+
+| Gate | 실험 | 통과/대안 |
 | --- | --- | --- |
-| Native renderer boot | 필수 | 필수 |
-| Native article open | 필수 | 필수 |
-| Bookmark book open | 필수 | 필수 |
-| Selection → AI quote | 필수 | 필수 |
-| Restart restore | 필수 | 필수 |
-| Docling fallback | 필수 | 필수 |
-| Worker cancel | 필수 | 필수 |
-| Offline viewer assets | 필수 | 필수 |
-| Restricted shell PATH | 선택 | 필수 |
-| App quit cleanup | 필수 | 필수 |
+| G1 좌표 | 2단·회전·CropBox·다중 페이지 anchor와 crop 왕복 | 잘못된 정밀 링크 0; 실패 page fallback |
+| G2 구조 | 10편의 문단/heading/caption 수동 정답과 비교 | 핵심 section·본문 누락 확인; 저신뢰 fallback |
+| G3 Codex | 격리 인증, text/image/schema, tools disabled, interrupt, usage | 앱에서 실행 가능한 통제 확인; 미지원 버전 차단 |
+| G4 Claude | 공식 인증 형태, 실제 billing route, no tools, stream/image/cancel | 조건 충족 연결만 enable; 미해결 provider 보류 |
+| G5 학습 | 수작업 LessonSpec 3종을 native WebKit에서 재생 | 조작·근거·키보드·확대 동작 |
+| G6 저장/성능 | packaged Bun FTS5, 80/320페이지 extraction RSS·UI 지연 | bounded index; 필요 시 일반 table 검색 |
 
-### Exit criteria
+P0 산출물은 docs/qa/research-platform-spike.md와 필요 ADR 003-evidence-model, 004-provider-auth, 005-lesson-runtime에 남긴다. 표의 경로는 향후 생성할 파일이다. 실패를 숨기고 다음 단계로 강행하지 않되, 실패한 provider/OCR만 분리해 독립적인 핵심 작업은 계속할 수 있다.
 
-- [ ] clean environment packaged smoke 통과
-- [ ] PATH/CDN 의존 없음
-- [ ] code signing과 notarization 결과 확인
-- [ ] runtime ADR과 renderer/CEF artifact 구성이 일치
-- [ ] security checklist와 dependency audit 완료
-- [ ] worker orphan 없음
+## 10. QA 계획
 
-권장 commit: `build: package PDF engines and analysis worker`
+### 기존 회귀 기반
 
-## ✅ Phase 11 — 종합 QA와 release gate
+기존 test suite와 golden selection corpus를 유지한다. 현재 fixture에는 한글, 다단, ligature/hyphen, 회전, 다중 페이지, 스캔, nested/bad bookmarks, 320페이지 책이 있다.
 
-### 자동 검증
+구현 시 변경 영역에 맞춰 다음 기존 명령을 사용한다.
 
-최종 script 이름은 실제 package에 맞추되 최소 다음 범주를 모두 실행한다.
-
-```bash
+~~~sh
 bun run typecheck
-bun run lint
-bun test
+bun run test
 bun run test:viewer
-bun run build:dev
 bun run build:stable
-```
+bun run verify:package
+~~~
 
-Python worker가 포함되면 다음도 실행한다.
+현재 test:viewer는 manifest test도 포함하므로 그것만 통과했다고 실제 PDFium 선택·인용 UI를 검증했다고 보고하지 않는다. in-app golden runner와 실제 drag/click 검증을 별도로 수행한다. lint 기존 실패는 새 변경과 분리해서 기록한다.
 
-```bash
-<bundled-python> -m compileall -q <worker-src>
-<bundled-python> -m pytest -q <worker-tests>
-```
+### 새 자동 검증
 
-### 실제 문서 QA
+| 층 | 의미 있는 검증 |
+| --- | --- |
+| 좌표·텍스트 | frame 왕복, 회전/CropBox, Unicode offset, 반복 quote, 다단 읽기 |
+| 섹션·색인 | 같은 페이지 경계, interruption/resume, partial coverage, revision |
+| 인용 | 가짜 ID, 다른 문서 hash, quote 불일치, stale anchor, multi-span |
+| 검색 | 한국어 질의→영어 본문, section scope, reference 필요 질문 |
+| provider | fake stdio crash/malformed/timeout, early event, model switch race |
+| 비용 | quota error/unknown/exhausted, 환경 API key 혼입, fallback spy |
+| 작업 | 취소한 job의 late event, 문서 전환, 재시도 중복, 앱 종료 |
+| 저장 | idempotent migration, backup 복원, atomic asset, 강제 종료 |
+| 학습 | invalid schema, missing source, bad units/ranges, 스크립트·URL 주입 |
+| capture | 회전·Retina·축소, MIME/pixel bounds, 실패 upload cleanup |
 
-최소 다음 실제 문서를 수동 검증한다. 라이선스 때문에 저장소에 commit하지 않아도 된다.
+prompt injection fixture에 “이전 지시 무시”, 로컬 파일 읽기, 외부 URL 전송 요구를 넣는다. source content가 tool/action이나 provider 설정으로 승격되지 않음을 검사한다.
 
-- 짧은 native 학술 논문
-- 2단 편집과 footnote가 있는 논문
-- 표와 multi-panel figure가 있는 논문
-- nested bookmark 단행본
-- bookmark 없는 단행본
-- 한국어 PDF
-- image-only scanned PDF
-- 300페이지 이상 PDF
+### 근거 품질 평가
 
-각 문서에서 기록할 항목:
+최소 10개 논문을 포함한 고정 평가 corpus를 구성한다. open-access 또는 사용자가 제공한 문서를 이용하고 배포 권리가 없는 PDF는 repository에 넣지 않는다.
 
-- classifier result/evidence
-- selected routing과 worker 실행 여부
-- selection expected/actual
-- current context key
-- AI에 전달된 source 목록
-- citation navigation
-- restart 복구
-- diagnostics와 사용자 표시
+- 분야: 실험·관찰·리뷰·이론 논문, 한글/영어.
+- 최소 100개 anchor, 100개 factual claims, 20개 figure/table capture, 10개 learning module.
+- retrieval recall과 citation 위치 정확성, claim 지지 여부, 사실형 문장의 citation coverage를 별도 측정한다.
+- unsupported 답변을 회피해 점수를 높이지 못하도록 answerable/unanswerable 질문을 미리 정한다.
+- oracle label은 사람이 원문을 읽고 작성한다. 가능하면 일부 표본을 두 사람이 독립 평가하고 불일치를 기록한다.
+- 폐쇄형/오픈 모델 비교는 같은 scope·evidence·rubric·재시도 budget으로 수행한다. 측정 전 모델 우열을 확정하지 않는다.
 
-### Release blocking failures
+### 설치 앱 확인
 
-다음 중 하나라도 있으면 release하지 않는다.
+system-volume의 별도 테스트 설치에서 검증한다. 기존 ADR의 external-volume self-extractor 제한을 재확인하고 사용자의 현재 앱을 무단 교체하지 않는다.
 
-- golden selection 불일치
-- article/book override가 재시작 후 사라짐
-- usable bookmark book에서 불필요한 Docling 실행
-- article에서 chapter session 생성
-- page/chapter 전환 중 chat session 오염
-- source context budget 초과
-- packaged app에서 WASM/worker/CMap 누락
-- runtime ADR과 다른 renderer로 packaging되거나 Electrobun native artifact에 CEF가 포함됨
-- clean environment에서 bundled Python/Preppy가 system PATH 또는 user-installed package를 요구함
-- 원본 PDF 수정
-- orphan Python process
-- API key 또는 PDF 본문이 log에 노출
+시나리오: 열기 → 목표 생성 → 질문 → citation 이동/돌아가기 → capture → section lesson → 답변/점검 → 강제 종료 → 재개. provider별로 text/image를 앱의 실제 context 경로로 검증한다.
 
-### Exit criteria
+추가로 offline reading, signed out, 한도 소진, CLI 삭제/업데이트, Finder restricted PATH, window resize, 200% font, keyboard/VoiceOver를 점검한다. API key·OAuth token·논문 본문이 log/crash export에 포함되지 않는지 검사한다.
 
-- [ ] PRD의 AC-01부터 AC-08까지 증거가 있음
-- [ ] 자동 test와 `build:stable` 통과
-- [ ] packaged manual QA 완료
-- [ ] 알려진 제한이 `README.md`와 diagnostics UI에 반영됨
-- [ ] release checklist와 rollback note 작성
+## 11. 요구사항 추적
 
-권장 commit: `release: validate PDFie MVP`
-
-## 📊 요구사항 추적표
-
-| PRD 요구사항 | 구현 phase | 주 검증 |
+| PRD 기능 | 담당 단계 | 주요 acceptance |
 | --- | --- | --- |
-| 정확한 selection | 0, 3 | golden selection suite |
-| 동일 AI sidebar | 1, 7 | React parity + typed RPC integration |
-| article/book 구분 | 4 | corpus classifier test |
-| article 단일 session | 6, 7 | context-key test |
-| bookmark 우선 book | 5 | outline fixture + worker spy |
-| Docling fallback | 8 | worker integration |
-| page/bbox citation | 3, 7 | locator round trip |
-| restart persistence | 2, 3, 7 | restart integration |
-| Electrobun native runtime | 0, 10, 11 | runtime ADR + stable artifact inspection |
-| packaged app | 0, 8, 10, 11 | clean packaged smoke |
-| security/privacy | 1, 2, 10 | RPC/source-bridge/navigation tests |
+| F-01 문서/섹션 범위 | P3 | AC-01, 02, 07 |
+| F-02 Study Goals | P5 | AC-06, 11 |
+| F-03 근거 답변 | P1, P4 | AC-03~05, 14 |
+| F-04 인용 이동 | P3, P4 | AC-02, 03, 15 |
+| F-05 표/그림 | P6 | AC-08, 15 |
+| F-06 섹션 요약 | P5 | AC-07 |
+| F-07 Interactive Learning | P7 | AC-09, 10 |
+| F-08 이해 점검 | P7 | AC-11 |
+| F-09 저장·재개·export | P1, P4, P7 | AC-11, 14 |
+| 구독·모델·비용 | P2 및 모든 생성 경로 | AC-12, 13 |
+| 설치 앱 품질 | P8 | AC-01~15 |
 
-## ⚠️ 구현자가 멈추고 보고해야 하는 조건
+## 12. 출시 판정과 후속 작업
 
-다음 상황에서는 임의 workaround를 product behavior로 굳히지 말고 현재 증거와 대안을 정리해 사용자에게 보고한다.
+release blockers: 잘못된 문단을 정확한 근거처럼 강조, 다른 문서의 history 유입, 원문/주석 손상, 인증 정보 노출, 임의 generated code 실행, 숨은 유료 API 전환, 취소 후 무한 생성, 복구 불가능한 이관.
 
-- EmbedPDF와 PDFSlick 모두 selection golden gate를 통과하지 못함
-- PDFium WASM, Blob module worker 또는 PDF.js worker가 packaged Electrobun native view에서 안정적으로 로드되지 않음
-- Electrobun native에서는 실패하고 CEF에서만 통과해 Electron 비교가 필요함
-- Electrobun config/API가 문서와 달라 native renderer, `views://` 또는 `build.copy` contract를 type-safe하게 구성할 수 없음
-- PDF source bridge가 raw path 노출 없이 300페이지 fixture의 성능·메모리 budget을 충족하지 못함
-- Preppy schema 변경 없이는 page_end/provenance를 안전하게 만들 수 없음
-- article/book classifier가 corpus 목표를 충족하지 못함
-- AI provider의 실제 context window를 알 수 없어 안전한 budget을 계산할 수 없음
-- copy restriction을 우회해야만 요구사항을 달성할 수 있음
-- 새로운 dependency의 license가 배포 방식과 호환되지 않음
-- 기존 MD Reader AI code의 현재 변경과 PDFie port가 충돌함
+허용 가능한 제한은 UI와 release note에 명시한다. 예: 일부 스캔은 OCR 필요, 특정 모델은 vision 불가, Claude 경로는 검증 중, 일부 학습은 개념 예시. 제한이 있는 기능을 지원 완료라고 쓰지 않는다.
 
-보고에는 최소한 재현 fixture, expected/actual, root cause, 가능한 선택지, 추천안을 포함한다.
+구현 완료 시 README와 ADR 002를 실제 provider·저장·streaming 동작에 맞게 갱신한다. 재현 가능한 QA 결과, 실제 CLI/모델/runtime 버전, package 경로, 확인하지 못한 항목을 함께 남긴다.
 
-## 🔗 구현 참고 자료
+다음 실행 단위는 **P0**다. 먼저 기존 reader를 유지하는 최소 실험에서 문단 anchor→인용 클릭→원문 강조와 공식 provider의 통제 가능한 응답 경로를 각각 검증하고, 그 결과로 R1 범위와 일정을 확정한다.
 
-- [Extend PDF Viewer](https://ui.extend.ai/ui/docs/components/pdf-viewer)
-- [Extend UI source](https://github.com/extend-hq/ui)
-- [EmbedPDF](https://github.com/embedpdf/embed-pdf-viewer)
-- [EmbedPDF engine](https://github.com/embedpdf/embed-pdf-viewer/blob/main/website/src/content/docs/engines/introduction.mdx)
-- [EmbedPDF selection plugin](https://github.com/embedpdf/embed-pdf-viewer/blob/main/website/src/content/docs/react/viewer/plugins/plugin-selection.mdx)
-- [PDFSlick React](https://pdfslick.dev/docs/react-use-pdf-slick)
-- [PDFSlick store](https://pdfslick.dev/docs/react-use-pdf-slick-store)
-- [PDF.js document API](https://mozilla.github.io/pdf.js/api/draft/module-pdfjsLib-PDFDocumentProxy.html)
-- [PyMuPDF TOC API](https://pymupdf.readthedocs.io/en/latest/document.html#get-toc)
-- [Docling document model](https://docling-project.github.io/docling/concepts/docling_document/)
-- [Docling chunking](https://docling-project.github.io/docling/concepts/chunking/)
-- [Electrobun build configuration](https://framework.blackboard.sh/electrobun/apis/cli/build-configuration/)
-- [Electrobun bundled assets](https://github.com/blackboardsh/electrobun/blob/main/docs/src/content/docs/electrobun/apis/bundled-assets.mdx)
-- [Electrobun CEF configuration](https://github.com/blackboardsh/electrobun/blob/main/docs/src/content/docs/electrobun/apis/bundling-cef.mdx)
+## 13. 조사 출처
+
+모두 2026-10-10 확인. 아래 링크는 구현 시 다시 확인해야 할 공식 계약이며, 계정별 실제 동작 검증을 대체하지 않는다.
+
+- [EmbedPDF renderPageRect](https://www.embedpdf.com/docs/engines/rendering/render-page-rect): 영역 렌더; Context7에서도 확인.
+- [EmbedPDF text extraction](https://www.embedpdf.com/docs/pdfium/examples/extract-text-from-pdf): 문자 추출 기반; 문단 복원은 앱 책임.
+- [Codex App Server](https://developers.openai.com/codex/app-server), [Authentication](https://developers.openai.com/codex/auth): 공식 client 연결·인증 구분.
+- [Claude 구독과 Agent SDK](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan): 구독 사용 관련 최신 안내.
+- [Claude legal/compliance](https://code.claude.com/docs/en/legal-and-compliance), [Agent SDK overview](https://platform.claude.com/docs/en/agent-sdk/overview): 통합·인증 경계.
+- [Claude authentication](https://code.claude.com/docs/en/authentication): 본인 인증·config 분리와 예외.
+- [Claude programmatic execution](https://code.claude.com/docs/en/headless), [CLI reference](https://code.claude.com/docs/en/cli-reference): structured streaming·중지·bare mode 제약.
+- 로컬 설치 타입 및 코드: [PDF engine](node_modules/@embedpdf/engines/dist/lib/orchestrator/pdf-engine.d.ts), [PDF models](node_modules/@embedpdf/models/dist/pdf.d.ts), [기존 source bridge](src/bun/pdf/document-source-bridge.ts), [QA 기록](docs/qa/phase-0-results.md).
+
+이번 문서 작업은 위 조사와 계획 작성만 수행했다. 실제 기능 test/실계정 모델 호출/앱 빌드·설치는 실행하지 않았다.

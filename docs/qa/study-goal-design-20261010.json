@@ -1,0 +1,31 @@
+{
+  "date": "2026-10-10",
+  "installedApp": "/Applications/PDFie.app",
+  "payloadSha256": "1f1bf5c77dc57189bed7314ae7ad0f46d9b7f9041d38a40f2883d43fd40b38a6",
+  "bunSha256": "7251295bedf8dd1bc0fff38d57b1b8339df664ad0c642e019cf4786e5f73c8de",
+  "viewSha256": "529d38ef2e28b811ae0bf5dac930825da7260aab24880ad25b8f4f6aad330792",
+  "cssSha256": "a04a32b3b41a336552d1c9f66c02e570487d6e219394cda5b39bf3d1144c7d38",
+  "renderer": "native-webkit",
+  "document": "2026 - Carhart-Harris - The entropic brain today.pdf",
+  "observed": {
+    "preparedPages": "17/17",
+    "goals": 7,
+    "explored": 2,
+    "checked": 0,
+    "singlePageDefaultPreserved": true,
+    "questionExpandsPrerequisitesCheckQuestionAndCitations": true,
+    "moreMenuHasEditMoveUpMoveDownAndDelete": true,
+    "firstGoalMoveUpDisabled": true,
+    "escapeClosesMenuAndRestoresTriggerFocus": true,
+    "enterReopensMenu": true,
+    "editingFocusesQuestion": true,
+    "cancelDiscardsUnsavedQuestionAndPreservesOriginal": true,
+    "sidebarWidthsChecked": [554, 340],
+    "narrowActionsWrapAndRemainVisible": true,
+    "sidebarWidthRestored": 554,
+    "fontSizePreserved": 14
+  },
+  "studyGenerationCallsDuringQa": 0,
+  "savedGoalsEditedOrDeletedDuringQa": 0,
+  "backupApp": "/Users/anselm/Library/Application Support/PDFie Backups/20261010-goal-design/PDFie-before-goal-design.app"
+}

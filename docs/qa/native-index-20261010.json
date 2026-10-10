@@ -1,0 +1,315 @@
+{
+  "fileName": "2026 - Carhart-Harris - The entropic brain today.pdf",
+  "documentHash": "970cedcf5aa8b8d6150d91622309173d455eac6314d6c9796cae1aa1d2490a34",
+  "engine": "EmbedPDF/PDFium 2.14.4",
+  "index": {
+    "revision": "970cedcf5aa8b8d6150d91622309173d455eac6314d6c9796cae1aa1d2490a34:native-styled-headings-v3",
+    "pageCount": 17,
+    "indexedPages": 17,
+    "failedPages": [],
+    "failedPageReasons": [],
+    "ocrPages": [],
+    "blockCount": 819
+  },
+  "pages": [
+    {
+      "page": 1,
+      "nativeRuns": 149,
+      "blocks": 17,
+      "sourceCharacters": 4606,
+      "payloadBytes": 15227,
+      "status": "ready"
+    },
+    {
+      "page": 2,
+      "nativeRuns": 1310,
+      "blocks": 27,
+      "sourceCharacters": 7883,
+      "payloadBytes": 23203,
+      "status": "ready"
+    },
+    {
+      "page": 3,
+      "nativeRuns": 332,
+      "blocks": 59,
+      "sourceCharacters": 6588,
+      "payloadBytes": 28127,
+      "status": "ready"
+    },
+    {
+      "page": 4,
+      "nativeRuns": 1329,
+      "blocks": 19,
+      "sourceCharacters": 7941,
+      "payloadBytes": 21671,
+      "status": "ready"
+    },
+    {
+      "page": 5,
+      "nativeRuns": 426,
+      "blocks": 38,
+      "sourceCharacters": 6587,
+      "payloadBytes": 23081,
+      "status": "ready"
+    },
+    {
+      "page": 6,
+      "nativeRuns": 1291,
+      "blocks": 23,
+      "sourceCharacters": 7795,
+      "payloadBytes": 22187,
+      "status": "ready"
+    },
+    {
+      "page": 7,
+      "nativeRuns": 1304,
+      "blocks": 22,
+      "sourceCharacters": 7544,
+      "payloadBytes": 21610,
+      "status": "ready"
+    },
+    {
+      "page": 8,
+      "nativeRuns": 1322,
+      "blocks": 24,
+      "sourceCharacters": 8001,
+      "payloadBytes": 22569,
+      "status": "ready"
+    },
+    {
+      "page": 9,
+      "nativeRuns": 160,
+      "blocks": 14,
+      "sourceCharacters": 4218,
+      "payloadBytes": 14096,
+      "status": "ready"
+    },
+    {
+      "page": 10,
+      "nativeRuns": 377,
+      "blocks": 40,
+      "sourceCharacters": 7430,
+      "payloadBytes": 25154,
+      "status": "ready"
+    },
+    {
+      "page": 11,
+      "nativeRuns": 1294,
+      "blocks": 25,
+      "sourceCharacters": 7600,
+      "payloadBytes": 22219,
+      "status": "ready"
+    },
+    {
+      "page": 12,
+      "nativeRuns": 1132,
+      "blocks": 89,
+      "sourceCharacters": 6826,
+      "payloadBytes": 34083,
+      "status": "ready"
+    },
+    {
+      "page": 13,
+      "nativeRuns": 1159,
+      "blocks": 86,
+      "sourceCharacters": 7175,
+      "payloadBytes": 33790,
+      "status": "ready"
+    },
+    {
+      "page": 14,
+      "nativeRuns": 1174,
+      "blocks": 95,
+      "sourceCharacters": 7171,
+      "payloadBytes": 35774,
+      "status": "ready"
+    },
+    {
+      "page": 15,
+      "nativeRuns": 1206,
+      "blocks": 93,
+      "sourceCharacters": 7312,
+      "payloadBytes": 35328,
+      "status": "ready"
+    },
+    {
+      "page": 16,
+      "nativeRuns": 1180,
+      "blocks": 93,
+      "sourceCharacters": 7161,
+      "payloadBytes": 35086,
+      "status": "ready"
+    },
+    {
+      "page": 17,
+      "nativeRuns": 625,
+      "blocks": 55,
+      "sourceCharacters": 3686,
+      "payloadBytes": 21842,
+      "status": "ready"
+    }
+  ],
+  "sections": [
+    {
+      "title": "문서 정보",
+      "pageStart": 1,
+      "pageEnd": 1,
+      "source": "page",
+      "sourceUnits": 2
+    },
+    {
+      "title": "The entropic brain today",
+      "pageStart": 1,
+      "pageEnd": 1,
+      "source": "heading",
+      "sourceUnits": 10
+    },
+    {
+      "title": "Introduction",
+      "pageStart": 1,
+      "pageEnd": 2,
+      "source": "heading",
+      "sourceUnits": 12
+    },
+    {
+      "title": "Single versus multi-dimensional approaches to consciousness",
+      "pageStart": 2,
+      "pageEnd": 2,
+      "source": "heading",
+      "sourceUnits": 11
+    },
+    {
+      "title": "Type 1 versus type 2 complexity",
+      "pageStart": 2,
+      "pageEnd": 3,
+      "source": "heading",
+      "sourceUnits": 10
+    },
+    {
+      "title": "The origins of the entropic brain",
+      "pageStart": 3,
+      "pageEnd": 3,
+      "source": "heading",
+      "sourceUnits": 7
+    },
+    {
+      "title": "FunctionalMRI and the entropic brain",
+      "pageStart": 3,
+      "pageEnd": 4,
+      "source": "heading",
+      "sourceUnits": 59
+    },
+    {
+      "title": "Electrophysiology and the entropic brain effect under psychedelics",
+      "pageStart": 4,
+      "pageEnd": 5,
+      "source": "heading",
+      "sourceUnits": 16
+    },
+    {
+      "title": "Other psychoactive compounds and psychedelic microdosing",
+      "pageStart": 5,
+      "pageEnd": 6,
+      "source": "heading",
+      "sourceUnits": 34
+    },
+    {
+      "title": "Sleep and dreaming",
+      "pageStart": 6,
+      "pageEnd": 6,
+      "source": "heading",
+      "sourceUnits": 6
+    },
+    {
+      "title": "Non-drug-induced increases or elevations in brain entropy",
+      "pageStart": 6,
+      "pageEnd": 7,
+      "source": "heading",
+      "sourceUnits": 17
+    },
+    {
+      "title": "Disorders of consciousness",
+      "pageStart": 7,
+      "pageEnd": 7,
+      "source": "heading",
+      "sourceUnits": 6
+    },
+    {
+      "title": "Neurological and neurodegenerative disorders, cognitive impairment and ageing",
+      "pageStart": 7,
+      "pageEnd": 7,
+      "source": "heading",
+      "sourceUnits": 6
+    },
+    {
+      "title": "Other aspects of entropic physiology and behaviour",
+      "pageStart": 7,
+      "pageEnd": 7,
+      "source": "heading",
+      "sourceUnits": 4
+    },
+    {
+      "title": "Entropy and creativity",
+      "pageStart": 7,
+      "pageEnd": 8,
+      "source": "heading",
+      "sourceUnits": 10
+    },
+    {
+      "title": "Re-analysing the psilocybin and LSD MEG data",
+      "pageStart": 8,
+      "pageEnd": 9,
+      "source": "heading",
+      "sourceUnits": 20
+    },
+    {
+      "title": "Summarizing the validity of the entropic brain hypothesis",
+      "pageStart": 9,
+      "pageEnd": 11,
+      "source": "heading",
+      "sourceUnits": 54
+    },
+    {
+      "title": "Limitations of the entropic brain hypothesis",
+      "pageStart": 11,
+      "pageEnd": 11,
+      "source": "heading",
+      "sourceUnits": 17
+    },
+    {
+      "title": "Conclusions",
+      "pageStart": 11,
+      "pageEnd": 11,
+      "source": "heading",
+      "sourceUnits": 2
+    },
+    {
+      "title": "Acknowledgements",
+      "pageStart": 11,
+      "pageEnd": 11,
+      "source": "heading",
+      "sourceUnits": 5
+    },
+    {
+      "title": "Funding",
+      "pageStart": 12,
+      "pageEnd": 12,
+      "source": "heading",
+      "sourceUnits": 2
+    },
+    {
+      "title": "Competing interests",
+      "pageStart": 12,
+      "pageEnd": 12,
+      "source": "heading",
+      "sourceUnits": 2
+    },
+    {
+      "title": "References",
+      "pageStart": 12,
+      "pageEnd": 17,
+      "source": "heading",
+      "sourceUnits": 507
+    }
+  ]
+}

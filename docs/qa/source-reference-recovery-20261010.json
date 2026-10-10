@@ -1,0 +1,52 @@
+{
+  "checkedAt": "2026-10-10T09:01:29.496Z",
+  "paper": "2026 - Sloutsky et al. - Working memory, exploration, and cognitive development.pdf",
+  "documentHash": "45e8c455e39ecbb0fd2aae4b9ac1989771f5d373f5583c8bb5b692aab55d816e",
+  "indexedPages": 4,
+  "totalPages": 4,
+  "diagnosis": {
+    "failedRequestId": "b251b428-efb8-48a6-936a-af44bde9bf56",
+    "rejectedId": "E-1-26-5ac1b12b897d2e1e4",
+    "actualId": "E-1-26-5ac1b12b897d2e1e",
+    "cause": "Model appended one character to a supplied source ID; strict validation rejected all proposed goals.",
+    "reproduced": true
+  },
+  "fix": {
+    "requestBoundSourceEnum": true,
+    "sharedSourceDefinition": true,
+    "sectionEnum": true,
+    "referenceFailureRetryLimit": 1,
+    "fuzzyIdReplacement": false,
+    "unverifiedOutputSaved": false
+  },
+  "automated": {
+    "typecheck": "passed",
+    "unitTestFiles": 23,
+    "unitTests": 151,
+    "sourceRecovery": "passed including corrected response, persistent failure, section mismatch, no retry for unrelated errors, cancellation during retry, preserved goals",
+    "otherIntegrations": "source bridge, document persistence, study platform, library and adaptive lessons passed",
+    "diffCheck": "passed"
+  },
+  "installed": {
+    "app": "/Applications/PDFie.app",
+    "backendSha256": "ddcbad65da7a4f21c07061e29fe4855cd6d480393673f68cd1a1772ca97fb7ac",
+    "packageVerification": "passed; 24 files; native WebKit; sandbox bundles and license present"
+  },
+  "nativeQA": {
+    "requestId": "23f799a9-35ea-4e13-866b-a6b72ab1d921",
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "state": "completed",
+    "coverage": "본문 4/4페이지 준비 · 이 요청의 원문 64/184단위 사용",
+    "goalCount": 8,
+    "goalCitationCount": 24,
+    "allGoalCitationsMatchRequestAndCurrentSource": true,
+    "citationClicked": "E-1-26-5ac1b12b897d2e1e",
+    "citationPage": 1,
+    "bodyHighlightObserved": true,
+    "priorProtectedEntitiesUnchanged": 71,
+    "assessmentSubmitted": false,
+    "liveAutomaticRetryObserved": false
+  },
+  "backupDirectory": "/Users/anselm/Library/Application Support/PDFie Backups/20261010-source-reference-recovery"
+}

@@ -22,6 +22,7 @@ export function EmptyLibrary({ onOpen, opening }: { onOpen: () => void; opening:
           {opening ? "여는 중…" : "PDF 열기"}
           <kbd>⌘O</kbd>
         </button>
+        <p className="drop-hint">또는 Finder에서 PDF를 이 창에 끌어놓으세요.</p>
       </section>
       <ul className="welcome-rules" aria-label="PDFie 핵심 기능">
         <li>

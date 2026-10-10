@@ -19,9 +19,15 @@ export default {
       main: {
         entrypoint: "src/views/main/index.tsx",
       },
+      sandbox: { entrypoint: "src/views/sandbox/index.ts" },
+      sandboxHost: { entrypoint: "src/views/sandbox/host.ts" },
     },
     copy: {
       "src/views/main/index.html": "views/main/index.html",
+      "src/views/main/settings.html": "views/main/settings.html",
+      "src/views/sandbox/index.html": "views/sandbox/index.html",
+      "src/views/sandbox/host.html": "views/sandbox/host.html",
+      "src/vendor/openintelligentui/LICENSE": "licenses/OpenIntelligentUI-LICENSE",
       "src/views/main/bootstrap.js": "views/main/bootstrap.js",
       "src/views/main/styles/app.css": "views/main/app.css",
       "node_modules/@embedpdf/pdfium/dist/pdfium.wasm": "views/main/assets/pdfium.wasm",

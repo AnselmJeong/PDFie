@@ -1,0 +1,40 @@
+{
+  "date": "2026-10-10",
+  "installedTarget": "/Applications/PDFie.app",
+  "installedIdentity": "dev.aquatope.pdfie",
+  "channel": "stable",
+  "renderer": "native-webkit",
+  "cefBundled": false,
+  "payloadSha256": "f5340494328bc5dbadff08dd3a37e30db4d25ddd22004997803527cf2a30bb1b",
+  "files": {
+    "Contents/Resources/app/bun/index.js": "1817ba0baa61fb6c43d8d714670814989744626bcbf2b58a8df953f59aac5865",
+    "Contents/Resources/app/views/main/index.js": "16da60d044979ae05d52eb3d7b82bdc380c767d3168e898258d28fc4f6e92a1c",
+    "Contents/Resources/app/views/main/settings.html": "23f862241d4c265e456fe3e0b6f346814b42f8eb883f0bcf98f7fe10211402be",
+    "Contents/Resources/app/views/main/app.css": "8a4ab81d653633a5fa368cd4e1dc60f9fc1ff79bfc9dae996fd7758b717d3ee7",
+    "Contents/Resources/app/views/main/assets/pdfium.wasm": "c0af5a6aca30d7e54a149c3a68e317116ca906d6edc28fd3318b12c7d9478ac8"
+  },
+  "installedAcceptance": {
+    "preparedPages": 17,
+    "totalPages": 17,
+    "failedPages": [],
+    "sourceUnits": 819,
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "koreanGoals": 7,
+    "allGoalReferencesValid": true,
+    "separateSettingsWindow": true,
+    "connectedLoginDisabled": true,
+    "staleLoginMessageAbsent": true,
+    "sourceCitationAndReturnVerified": true,
+    "sections": 23,
+    "wrappedSubheadingAndBodyVerified": true,
+    "internalRequestsExcludedFromConversation": true,
+    "existingActionRecordsRetained": 14,
+    "actualConversationRecords": 0,
+    "summarySourceUnits": 11,
+    "adaptiveSectionSummaryVerified": true,
+    "composerDraftPreservedDuringAction": true,
+    "storedSummaryReopenedAfterRestart": true,
+    "priorExplanationRegenerationNoticeVerified": true
+  }
+}

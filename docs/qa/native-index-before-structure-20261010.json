@@ -1,0 +1,152 @@
+{
+  "fileName": "2026 - Carhart-Harris - The entropic brain today.pdf",
+  "documentHash": "970cedcf5aa8b8d6150d91622309173d455eac6314d6c9796cae1aa1d2490a34",
+  "engine": "EmbedPDF/PDFium 2.14.4",
+  "index": {
+    "revision": "970cedcf5aa8b8d6150d91622309173d455eac6314d6c9796cae1aa1d2490a34:native-paragraphs-v2",
+    "pageCount": 17,
+    "indexedPages": 17,
+    "failedPages": [],
+    "failedPageReasons": [],
+    "ocrPages": [],
+    "blockCount": 841
+  },
+  "pages": [
+    {
+      "page": 1,
+      "nativeRuns": 149,
+      "blocks": 28,
+      "sourceCharacters": 4606,
+      "payloadBytes": 17105,
+      "status": "ready"
+    },
+    {
+      "page": 2,
+      "nativeRuns": 1310,
+      "blocks": 30,
+      "sourceCharacters": 7883,
+      "payloadBytes": 23612,
+      "status": "ready"
+    },
+    {
+      "page": 3,
+      "nativeRuns": 332,
+      "blocks": 59,
+      "sourceCharacters": 6588,
+      "payloadBytes": 27832,
+      "status": "ready"
+    },
+    {
+      "page": 4,
+      "nativeRuns": 1329,
+      "blocks": 22,
+      "sourceCharacters": 7941,
+      "payloadBytes": 22118,
+      "status": "ready"
+    },
+    {
+      "page": 5,
+      "nativeRuns": 426,
+      "blocks": 39,
+      "sourceCharacters": 6587,
+      "payloadBytes": 23068,
+      "status": "ready"
+    },
+    {
+      "page": 6,
+      "nativeRuns": 1291,
+      "blocks": 24,
+      "sourceCharacters": 7795,
+      "payloadBytes": 22252,
+      "status": "ready"
+    },
+    {
+      "page": 7,
+      "nativeRuns": 1304,
+      "blocks": 23,
+      "sourceCharacters": 7544,
+      "payloadBytes": 21680,
+      "status": "ready"
+    },
+    {
+      "page": 8,
+      "nativeRuns": 1322,
+      "blocks": 24,
+      "sourceCharacters": 8001,
+      "payloadBytes": 22449,
+      "status": "ready"
+    },
+    {
+      "page": 9,
+      "nativeRuns": 160,
+      "blocks": 15,
+      "sourceCharacters": 4218,
+      "payloadBytes": 14205,
+      "status": "ready"
+    },
+    {
+      "page": 10,
+      "nativeRuns": 377,
+      "blocks": 40,
+      "sourceCharacters": 7430,
+      "payloadBytes": 24954,
+      "status": "ready"
+    },
+    {
+      "page": 11,
+      "nativeRuns": 1294,
+      "blocks": 26,
+      "sourceCharacters": 7600,
+      "payloadBytes": 22274,
+      "status": "ready"
+    },
+    {
+      "page": 12,
+      "nativeRuns": 1132,
+      "blocks": 89,
+      "sourceCharacters": 6826,
+      "payloadBytes": 33638,
+      "status": "ready"
+    },
+    {
+      "page": 13,
+      "nativeRuns": 1159,
+      "blocks": 86,
+      "sourceCharacters": 7175,
+      "payloadBytes": 33360,
+      "status": "ready"
+    },
+    {
+      "page": 14,
+      "nativeRuns": 1174,
+      "blocks": 95,
+      "sourceCharacters": 7171,
+      "payloadBytes": 35299,
+      "status": "ready"
+    },
+    {
+      "page": 15,
+      "nativeRuns": 1206,
+      "blocks": 93,
+      "sourceCharacters": 7312,
+      "payloadBytes": 34863,
+      "status": "ready"
+    },
+    {
+      "page": 16,
+      "nativeRuns": 1180,
+      "blocks": 93,
+      "sourceCharacters": 7161,
+      "payloadBytes": 34621,
+      "status": "ready"
+    },
+    {
+      "page": 17,
+      "nativeRuns": 625,
+      "blocks": 55,
+      "sourceCharacters": 3686,
+      "payloadBytes": 21567,
+      "status": "ready"
+    }
+  ]
+}

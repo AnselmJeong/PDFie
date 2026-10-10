@@ -31,10 +31,16 @@ const requiredFiles = [
   "Contents/MacOS/launcher",
   "Contents/Resources/app/bun/index.js",
   "Contents/Resources/app/views/main/index.html",
+  "Contents/Resources/app/views/main/settings.html",
   "Contents/Resources/app/views/main/index.js",
   "Contents/Resources/app/views/main/app.css",
   "Contents/Resources/app/views/main/bootstrap.js",
   "Contents/Resources/app/views/main/assets/pdfium.wasm",
+  "Contents/Resources/app/views/sandbox/index.html",
+  "Contents/Resources/app/views/sandbox/index.js",
+  "Contents/Resources/app/views/sandbox/host.html",
+  "Contents/Resources/app/views/sandboxHost/host.js",
+  "Contents/Resources/app/licenses/OpenIntelligentUI-LICENSE",
 ]
 
 for (const relativePath of requiredFiles) await access(join(inspectionTarget, relativePath))

@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src views: 'self'; style-src 'unsafe-inline'; frame-src views: 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'" />
+    <title>PDFie 격리 학습 영역</title>
+    <style>html,body{margin:0;width:100%;height:100%;overflow:hidden}iframe{border:0;width:100%;height:100%}</style>
+  </head>
+  <body>
+    <iframe id="lesson" title="맞춤 학습 화면" sandbox="allow-scripts" src="./index.html" referrerpolicy="no-referrer"></iframe>
+    <script src="views://sandboxHost/host.js"></script>
+  </body>
+</html>

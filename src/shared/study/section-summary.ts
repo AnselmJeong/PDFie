@@ -1,0 +1,5 @@
+export const SECTION_SUMMARY_INSTRUCTION = `Summarize the supplied section body according to what the author actually does in it. Preserve its main thread, important distinctions and reasoning, using a short coherent explanation or a few meaningful points as appropriate. A conceptual comparison needs its definitions and contrasts; an evidence review needs the evidence and its interpretation; a disclosure section needs a concise factual account. Do not force a fixed purpose/methods/results/limitations/open-questions template onto every section. Include such details only when the supplied body contains them. Do not invent missing experiments, results, limitations or questions. Treat titles, running headers and footers as navigation, not evidence for the substance of the section. When the supplied packet is partial, state that limitation without pretending to have read omitted material. Use the same evidence-grounded JSON answer format.`
+
+export function sectionSummaryQuestion(title: string): string {
+  return `“${title}”에서 저자가 설명하는 내용을 핵심 흐름이 드러나도록 요약해 주세요.`
+}

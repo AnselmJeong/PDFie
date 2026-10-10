@@ -1,6 +1,8 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto"
-import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises"
+import { constants } from "node:fs"
+import { chmod, copyFile, mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import { dirname } from "node:path"
+import type { ProviderId } from "../../shared/study/contracts"
 
 interface EncryptedSecret {
   iv: string
@@ -9,6 +11,8 @@ interface EncryptedSecret {
 }
 
 interface StoredAiSettings {
+  provider: ProviderId
+  providerModels: Partial<Record<ProviderId, string>>
   apiKey?: EncryptedSecret
   selectedModel: string
   sidebarWidth: number
@@ -16,6 +20,7 @@ interface StoredAiSettings {
 }
 
 export interface AiSettingsStatus {
+  provider: ProviderId
   endpoint: "https://ollama.com/v1"
   hasApiKey: boolean
   selectedModel: string
@@ -24,6 +29,8 @@ export interface AiSettingsStatus {
 }
 
 const DEFAULTS: StoredAiSettings = {
+  provider: "ollama-cloud",
+  providerModels: {},
   selectedModel: "",
   sidebarWidth: 390,
   sidebarFontSize: 14,
@@ -32,6 +39,8 @@ const DEFAULTS: StoredAiSettings = {
 export class AiSettingsRepository {
   #settings: StoredAiSettings = { ...DEFAULTS }
   #key: Buffer | null = null
+  #legacy = false
+  #loadFailed = false
 
   private constructor(
     readonly path: string,
@@ -41,16 +50,23 @@ export class AiSettingsRepository {
   static async open(path: string, keyPath: string): Promise<AiSettingsRepository> {
     const repository = new AiSettingsRepository(path, keyPath)
     try {
+      const stored = JSON.parse(await readFile(path, "utf8")) as Partial<StoredAiSettings>
+      repository.#legacy = !stored.provider
       repository.#settings = {
         ...DEFAULTS,
-        ...(JSON.parse(await readFile(path, "utf8")) as Partial<StoredAiSettings>),
+        ...stored,
+        provider: stored.provider === "codex" ? "codex" : "ollama-cloud",
+        providerModels: stored.providerModels ?? {},
       }
-    } catch {}
+    } catch (cause) {
+      repository.#loadFailed = (cause as NodeJS.ErrnoException).code !== "ENOENT"
+    }
     return repository
   }
 
   status(): AiSettingsStatus {
     return {
+      provider: this.#settings.provider,
       endpoint: "https://ollama.com/v1",
       hasApiKey: Boolean(process.env.OLLAMA_API_KEY?.trim() || this.#settings.apiKey),
       selectedModel: this.#settings.selectedModel,
@@ -73,12 +89,21 @@ export class AiSettingsRepository {
   }
 
   async update(patch: {
+    provider?: ProviderId
     apiKey?: string
     clearApiKey?: boolean
     selectedModel?: string
     sidebarWidth?: number
     sidebarFontSize?: number
   }): Promise<AiSettingsStatus> {
+    if (this.#loadFailed)
+      throw new Error("기존 AI 설정 파일을 읽지 못했습니다. 원본을 보존했으므로 복구 후 다시 시도하세요.")
+    if (patch.provider && patch.provider !== this.#settings.provider) {
+      if (!["ollama-cloud", "codex"].includes(patch.provider)) throw new Error("지원하지 않는 AI 연결입니다.")
+      this.#settings.providerModels[this.#settings.provider] = this.#settings.selectedModel
+      this.#settings.provider = patch.provider
+      this.#settings.selectedModel = this.#settings.providerModels[patch.provider] ?? ""
+    }
     if (patch.clearApiKey) this.#settings.apiKey = undefined
     if (patch.apiKey?.trim()) {
       const key = await this.#getOrCreateKey()
@@ -122,9 +147,18 @@ export class AiSettingsRepository {
 
   async #persist(): Promise<void> {
     await mkdir(dirname(this.path), { recursive: true })
+    if (this.#legacy) {
+      try {
+        await copyFile(this.path, `${this.path}.pre-study-v1.bak`, constants.COPYFILE_EXCL)
+        await chmod(`${this.path}.pre-study-v1.bak`, 0o600)
+      } catch (cause) {
+        if ((cause as NodeJS.ErrnoException).code !== "EEXIST") throw cause
+      }
+    }
     const temporary = `${this.path}.${crypto.randomUUID()}.tmp`
     await Bun.write(temporary, JSON.stringify(this.#settings, null, 2))
     await chmod(temporary, 0o600)
     await rename(temporary, this.path)
+    this.#legacy = false
   }
 }

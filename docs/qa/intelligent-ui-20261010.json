@@ -1,0 +1,49 @@
+{
+  "checkedAt": "2026-10-10T08:27:59.206Z",
+  "realPaperPages": 17,
+  "provider": "codex",
+  "model": "gpt-6.1-sol",
+  "stepTypes": [
+    "explanation",
+    "prediction",
+    "comparison",
+    "sandbox",
+    "evidence-map",
+    "quiz"
+  ],
+  "evidenceCount": 21,
+  "lessonId": "0ead2b7a-f7f3-4ba9-b2b2-1bcbf16cbc32",
+  "published": true,
+  "installedApp": "/Applications/PDFie.app",
+  "packageVerification": {
+    "passed": true,
+    "requiredFiles": 24,
+    "renderer": "native WebKit",
+    "sandboxBundlesAndLicensePresent": true
+  },
+  "automatedValidation": {
+    "typecheck": "passed",
+    "unitTestFiles": 22,
+    "unitTests": 147,
+    "integration": "source bridge, document state, study platform, study library, adaptive lesson persistence and export passed",
+    "diffCheck": "passed"
+  },
+  "installedRuntime": {
+    "comparisonCriterionChange": "verified; EBH criterion also restored after restart",
+    "sandboxControls": "verified; high arousal and narrow experience updated explanation and plot",
+    "widgetStateAfterRestart": {
+      "arousalSelect": "2",
+      "breadthSelect": "0"
+    },
+    "generatedEvidenceButton": "verified; opened quoted evidence and actual PDF page 2 with highlight",
+    "evidenceMap": "verified; claim selection distinguishes support, limits, and further checks",
+    "expandedScreenClippingAndScroll": "verified after native mask correction",
+    "escapeFromSandbox": "verified; closes expanded lesson",
+    "assessmentSubmitted": false
+  },
+  "scope": {
+    "integration": "OpenIntelligentUI contract and MIT design-system adapter with existing PDFie providers",
+    "streamedPreview": false,
+    "remainingLimitation": "Custom screens appear after the complete lesson has passed validation. Scientific accuracy still requires source review."
+  }
+}

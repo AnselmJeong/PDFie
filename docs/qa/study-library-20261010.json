@@ -1,0 +1,55 @@
+{
+  "date": "2026-10-10",
+  "installedTarget": "/Applications/PDFie.app",
+  "backup": "/Users/anselm/Library/Application Support/PDFie Backups/20261010-study-library-135854",
+  "originalRecords": {
+    "goals": 7,
+    "messages": 20
+  },
+  "originalRecordsPreserved": true,
+  "unitTests": 132,
+  "integrationTests": ["source bridge", "document annotation persistence", "study platform", "study library"],
+  "nativeOfflineReview": {
+    "separateIdentity": "dev.aquatope.pdfie.library-qa",
+    "originalPdfPresent": false,
+    "aiConnected": false,
+    "experimentValueAfterRestart": 51,
+    "quizAnswerAfterRestart": "절반으로 감소한다.",
+    "completionAfterRestart": true,
+    "savedEvidenceVisible": true
+  },
+  "installedRealPaper": {
+    "preparedPages": 17,
+    "totalPages": 17,
+    "goalsVisible": 7,
+    "libraryEntryVisible": true,
+    "readerReturnVisible": true
+  },
+  "initialInstallFiles": {
+    "Contents/Resources/app/bun/index.js": {
+      "package": "98387c6c8dc8c49fcf34073ab7088a8aa8b1f31bc380cd7473be63647ed57f00",
+      "installed": "98387c6c8dc8c49fcf34073ab7088a8aa8b1f31bc380cd7473be63647ed57f00",
+      "match": true
+    },
+    "Contents/Resources/app/views/main/index.js": {
+      "package": "41b4ff601b39399c0312a91653b2460b23fc677e7e4fd6801812e7d98387fd21",
+      "installed": "41b4ff601b39399c0312a91653b2460b23fc677e7e4fd6801812e7d98387fd21",
+      "match": true
+    },
+    "Contents/Resources/app/views/main/app.css": {
+      "package": "976e8b3aac5fd02f38493fafc3c688c013581174f0577879a56e3e006cff1075",
+      "installed": "976e8b3aac5fd02f38493fafc3c688c013581174f0577879a56e3e006cff1075",
+      "match": true
+    }
+  },
+  "currentInstalledVerification": {
+    "coordinatedWith": "PRD와 계획에 따라 PDFie 확장",
+    "sourceQaReport": "docs/qa/study-cancellation-20261010.json",
+    "libraryAndCancellationChangesPreserved": true,
+    "readOnlyCheck": true,
+    "files": {
+      "Contents/Resources/app/bun/index.js": "7251295bedf8dd1bc0fff38d57b1b8339df664ad0c642e019cf4786e5f73c8de",
+      "Contents/Resources/app/views/main/index.js": "41b4ff601b39399c0312a91653b2460b23fc677e7e4fd6801812e7d98387fd21"
+    }
+  }
+}
