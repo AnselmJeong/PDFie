@@ -38,6 +38,9 @@ const section = (id: string, title: string): StudySection => ({
   pageEnd: 2,
   source: "heading",
   userEdited: false,
+  level: 1,
+  parentId: null,
+  kind: "body",
 })
 const ref = (patch: Partial<EvidenceRef> = {}): EvidenceRef => ({
   id: "old-paragraph",

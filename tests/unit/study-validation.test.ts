@@ -206,6 +206,9 @@ describe("coordinate and retrieval boundaries", () => {
         pageEnd: 1,
         source: "heading" as const,
         userEdited: false,
+        level: 1,
+        parentId: null,
+        kind: "body" as const,
       },
     ]
     expect(

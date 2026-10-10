@@ -173,7 +173,7 @@ export class StudyService {
           precision: "region",
           quality: "uncertain",
         })
-      base.coverage = `본문 ${snapshot.index.indexedPages}/${snapshot.index.pageCount}페이지 준비 · 이 요청의 원문 ${found.blocks.length}/${found.eligibleCount}단위 사용${snapshot.index.ocrPages.length ? ` · OCR 필요 ${snapshot.index.ocrPages.length}페이지` : ""}`
+      base.coverage = `본문 ${snapshot.index.indexedPages}/${snapshot.index.pageCount}페이지 준비 · 이 요청의 원문 ${found.blocks.length}/${found.eligibleCount}단위 사용${found.excludedCount ? ` · 참고문헌·선언 등 부가 정보 ${found.excludedCount}단위 제외` : ""}${snapshot.index.ocrPages.length ? ` · OCR 필요 ${snapshot.index.ocrPages.length}페이지` : ""}`
       this.store.put(hash, "messages", `${request.requestId}-user`, {
         ...base,
         id: `${request.requestId}-user`,
@@ -201,7 +201,7 @@ export class StudyService {
         question: request.question,
         scope: request.scope,
         coverage: base.coverage,
-        sections: sections.map(({ id, title }) => ({ id, title })),
+        sections: sections.map(({ id, title, level, kind }) => ({ id, title, level, kind })),
         goal: goal
           ? { question: goal.question, prerequisites: goal.prerequisites, checkQuestion: goal.checkQuestion }
           : null,

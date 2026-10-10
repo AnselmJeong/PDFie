@@ -776,7 +776,9 @@ export function AiSidebar({
               </option>
               {snapshot?.sections.map((s) => (
                 <option key={s.id} value={s.id}>
+                  {"\u3000".repeat(Math.min(s.level, 4) - 1)}
                   {s.title}
+                  {s.kind === "back" ? " · 부가 정보" : ""}
                 </option>
               ))}
             </select>

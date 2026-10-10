@@ -2502,6 +2502,47 @@ textarea:focus-visible {
   transform: rotate(180deg);
   color: var(--accent);
 }
+/* Subsections step in under their parent; the step stops at the fourth level. */
+.section-row[data-level]:not([data-level="1"]) {
+  padding-left: calc(var(--section-depth, 0) * 14px);
+  padding-top: 11px;
+  padding-bottom: 9px;
+  border-top-style: dashed;
+}
+.section-row:not([data-level="1"]) .section-row-heading h3 {
+  font-weight: 450;
+}
+.section-row[data-kind="back"] .section-toggle {
+  color: var(--ink-muted);
+}
+/* The chevron hangs in the gutter so titles align with their siblings. */
+.section-tree-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: -13px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.section-tree-toggle svg {
+  transition: transform 160ms ease;
+}
+.section-tree-toggle[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+.section-kind {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  font-size: 9.5px;
+}
 .section-row-meta {
   display: flex;
   justify-content: space-between;
@@ -2675,7 +2716,8 @@ textarea:focus-visible {
     animation: none;
   }
   .section-row-actions,
-  .section-toggle svg {
+  .section-toggle svg,
+  .section-tree-toggle svg {
     transition: none;
   }
 }
@@ -3680,29 +3722,132 @@ textarea:focus-visible {
 }
 
 /* Adaptive source-grounded study catalog */
-.lesson-selectors { border: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 7px; margin: 16px 0; }
-.lesson-selectors button { text-align: left; line-height: 1.5; white-space: normal; }
-.lesson-selectors button[aria-pressed="true"] { border-color: var(--accent); background: var(--surface-soft); color: var(--accent); }
-.lesson-table-scroll { overflow-x: auto; margin: 14px 0; border: 1px solid var(--hairline); border-radius: 8px; }
-.lesson-table-scroll table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-.lesson-table-scroll caption { text-align: left; padding: 12px; font-weight: 600; background: var(--surface-soft); }
-.lesson-table-scroll th, .lesson-table-scroll td { padding: 12px; text-align: left; vertical-align: top; overflow-wrap: anywhere; min-width: 100px; border-right: 1px solid var(--hairline); }
-.lesson-table-scroll th { font-size: 13px; border-bottom: 1px solid var(--hairline); }
-.lesson-table-scroll td { font-size: 13px; line-height: 1.8; }
-.lesson-table-scroll th:last-child, .lesson-table-scroll td:last-child { border-right: 0; }
-.lesson-inline-evidence { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
-.lesson-detail-panel { padding: 14px 16px; border-left: 3px solid var(--accent); background: var(--surface-soft); border-radius: 0 8px 8px 0; }
-.lesson-detail-panel p, .lesson-detail-panel dd { margin: 7px 0 16px; line-height: 1.8; }
-.lesson-detail-panel dt { font-weight: 600; font-size: 13px; }
-.lesson-connections { padding-left: 18px; margin: 18px 0; font-size: 13px; line-height: 1.8; }
-.lesson-connections li { margin: 12px 0; }
-.lesson-signal label { display: grid; gap: 12px; margin: 18px 0; font-size: 13px; }
-.lesson-signal input { width: 100%; accent-color: var(--accent); }
-.lesson-signal-plots figure { margin: 14px 0; padding: 10px; background: var(--surface-soft); border-radius: 8px; }
-.lesson-signal-plots figcaption { font-size: 12px; color: var(--text-muted); }
-.lesson-signal-plots svg { display: block; width: 100%; }
-.lesson-signal-metrics { font-size: 13px; line-height: 1.8; }
-.lesson-signal-metrics dt { font-weight: 600; }
-.lesson-signal-metrics dd { margin: 0 0 10px; }
-.lesson-sandbox electrobun-webview { width: 100%; border: 1px solid var(--hairline); border-radius: 8px; background: var(--surface-raised); }
-.lesson-sandbox > p { line-height: 1.8; }
+.lesson-selectors {
+  border: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 16px 0;
+}
+.lesson-selectors button {
+  text-align: left;
+  line-height: 1.5;
+  white-space: normal;
+}
+.lesson-selectors button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--surface-soft);
+  color: var(--accent);
+}
+.lesson-table-scroll {
+  overflow-x: auto;
+  margin: 14px 0;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+}
+.lesson-table-scroll table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.lesson-table-scroll caption {
+  text-align: left;
+  padding: 12px;
+  font-weight: 600;
+  background: var(--surface-soft);
+}
+.lesson-table-scroll th,
+.lesson-table-scroll td {
+  padding: 12px;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+  min-width: 100px;
+  border-right: 1px solid var(--hairline);
+}
+.lesson-table-scroll th {
+  font-size: 13px;
+  border-bottom: 1px solid var(--hairline);
+}
+.lesson-table-scroll td {
+  font-size: 13px;
+  line-height: 1.8;
+}
+.lesson-table-scroll th:last-child,
+.lesson-table-scroll td:last-child {
+  border-right: 0;
+}
+.lesson-inline-evidence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
+}
+.lesson-detail-panel {
+  padding: 14px 16px;
+  border-left: 3px solid var(--accent);
+  background: var(--surface-soft);
+  border-radius: 0 8px 8px 0;
+}
+.lesson-detail-panel p,
+.lesson-detail-panel dd {
+  margin: 7px 0 16px;
+  line-height: 1.8;
+}
+.lesson-detail-panel dt {
+  font-weight: 600;
+  font-size: 13px;
+}
+.lesson-connections {
+  padding-left: 18px;
+  margin: 18px 0;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.lesson-connections li {
+  margin: 12px 0;
+}
+.lesson-signal label {
+  display: grid;
+  gap: 12px;
+  margin: 18px 0;
+  font-size: 13px;
+}
+.lesson-signal input {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.lesson-signal-plots figure {
+  margin: 14px 0;
+  padding: 10px;
+  background: var(--surface-soft);
+  border-radius: 8px;
+}
+.lesson-signal-plots figcaption {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.lesson-signal-plots svg {
+  display: block;
+  width: 100%;
+}
+.lesson-signal-metrics {
+  font-size: 13px;
+  line-height: 1.8;
+}
+.lesson-signal-metrics dt {
+  font-weight: 600;
+}
+.lesson-signal-metrics dd {
+  margin: 0 0 10px;
+}
+.lesson-sandbox electrobun-webview {
+  width: 100%;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--surface-raised);
+}
+.lesson-sandbox > p {
+  line-height: 1.8;
+}

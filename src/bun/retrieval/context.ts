@@ -6,6 +6,7 @@ import type {
   StudyScope,
   StudySection,
 } from "../../shared/study/contracts"
+import { sectionSubtree } from "../../shared/study/section-structure"
 
 const compact = (text: string) =>
   text
@@ -49,8 +50,10 @@ export function retrieveGoal(
 ) {
   const anchors = resolveEvidenceBlocks(blocks, evidence)
   const sectionIds = new Set(anchors.map((block) => block.sectionId))
-  if (goal.sectionId && sections.some((section) => section.id === goal.sectionId))
-    sectionIds.add(goal.sectionId)
+  if (goal.sectionId)
+    sectionSubtree(sections, goal.sectionId).forEach((id) => {
+      sectionIds.add(id)
+    })
   const candidates = sectionIds.size ? blocks.filter((block) => sectionIds.has(block.sectionId)) : blocks
   return retrieve(candidates, sections, { type: "document" }, question, task, "", undefined, anchors)
 }
@@ -113,10 +116,17 @@ export function retrieve(
   selectedText = "",
   capturePage?: number,
   anchors: StudyBlock[] = [],
-): { blocks: StudyBlock[]; eligibleCount: number } {
+): { blocks: StudyBlock[]; eligibleCount: number; excludedCount: number } {
   const section = scope.type === "section" ? sections.find((s) => s.id === scope.sectionId) : null
   if (scope.type === "section" && !section) throw new Error("선택한 섹션을 찾지 못했습니다.")
-  const eligible = blocks.filter((b) => !section || b.sectionId === section.id)
+  const broad = task !== "chat"
+  // A section includes its subsections. Document-wide summaries, goals and
+  // lessons leave out back matter (references, declarations) unless chosen.
+  const subtree = section ? sectionSubtree(sections, section.id) : null
+  const back = new Set(sections.filter((s) => s.kind === "back").map((s) => s.id))
+  const scoped = subtree ? blocks.filter((b) => subtree.has(b.sectionId)) : blocks
+  const study = scope.type === "document" && broad ? scoped.filter((b) => !back.has(b.sectionId)) : scoped
+  const eligible = study.length ? study : scoped
   const query = `${question} ${selectedText}`.toLowerCase()
   const tokens = new Set(query.match(/[\p{L}\p{N}]{2,}/gu) ?? [])
   for (const [korean, english] of Object.entries(TERMS))
@@ -124,7 +134,6 @@ export function retrieve(
       english.forEach((word) => {
         tokens.add(word)
       })
-  const broad = task !== "chat"
   const anchorPositions = anchors
     .map((anchor) => ({
       anchor,
@@ -155,6 +164,7 @@ export function retrieve(
       score += block.role === "caption" ? 40 : 12
     if (block.quality === "uncertain") score -= 2
     if (block.role === "reference" && !/referenc|참고|인용|citation/.test(query)) score -= 10
+    else if (scope.type === "document" && back.has(block.sectionId)) score -= 4
     return { block, score, index }
   })
   if (!anchors.length && (broad || !ranked.some((entry) => entry.score > 0))) {
@@ -204,5 +214,5 @@ export function retrieve(
   // continuations are intelligible to the model.
   const order = new Map(eligible.map((block, index) => [block.id, index]))
   found.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
-  return { blocks: found, eligibleCount: eligible.length }
+  return { blocks: found, eligibleCount: eligible.length, excludedCount: scoped.length - eligible.length }
 }

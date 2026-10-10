@@ -15,6 +15,7 @@ import {
   type StudySection,
   type StudySnapshot,
 } from "../../shared/study/contracts"
+import { analyzeStructure, isReferenceList, sectionKind } from "../../shared/study/section-structure"
 
 const normalize = (text: string) => text.normalize("NFC").replace(/\s+/g, " ").trim()
 const hashText = (text: string) => createHash("sha256").update(text).digest("hex").slice(0, 16)
@@ -22,6 +23,28 @@ type Row = { payload: string }
 type SectionAnchor = { text: string; pageIndex: number; rect?: StudyBlock["rects"][number] }
 type SectionBoundary = { blockId: string; title?: string; hidden?: boolean; anchor?: SectionAnchor }
 type SectionEdit = StudySection & { anchor?: SectionAnchor }
+
+function validStyle(style: unknown): StudyBlock["style"] {
+  const value = (typeof style === "object" && style ? style : {}) as Record<string, unknown>
+  const read = (key: string, min: number, max: number) => {
+    const n = value[key]
+    if (typeof n !== "number" || !Number.isFinite(n) || n < min || n > max)
+      throw new Error("문단 분석 데이터가 올바르지 않습니다.")
+    return n
+  }
+  if (typeof value.font !== "string" || value.font.length > 300)
+    throw new Error("문단 분석 데이터가 올바르지 않습니다.")
+  const size = read("size", 0.01, 2000)
+  return {
+    size,
+    bold: read("bold", 0, 1),
+    colored: read("colored", 0, 1),
+    italic: read("italic", 0, 1),
+    font: value.font,
+    top: read("top", -0.1, 1.1),
+    left: read("left", -0.1, 1.1),
+  }
+}
 
 export class StudyStore {
   readonly db: Database
@@ -157,6 +180,8 @@ export class StudyStore {
         !["usable", "uncertain"].includes(block.quality)
       )
         throw new Error("문단 분석 데이터가 올바르지 않습니다.")
+      const { style: rawStyle, ...rest } = block
+      const style = rawStyle === undefined ? undefined : validStyle(rawStyle)
       for (const rect of block.rects)
         if (
           ![rect.x, rect.y, rect.width, rect.height].every(Number.isFinite) ||
@@ -170,7 +195,7 @@ export class StudyStore {
           throw new Error("원문 위치가 페이지 범위를 벗어났습니다.")
       const id = `E-${page.pageIndex + 1}-${order}-${hashText(`${index.revision}:${block.rawText}:${JSON.stringify(block.rects)}`)}`
       return {
-        ...block,
+        ...rest,
         id,
         order,
         pageIndex: page.pageIndex,
@@ -178,6 +203,7 @@ export class StudyStore {
         revision: index.revision,
         normalizedText: normalize(block.rawText),
         sectionId: "",
+        ...(style ? { style } : {}),
       }
     })
     this.db.transaction(() => {
@@ -202,21 +228,16 @@ export class StudyStore {
       .all(documentHash)
       .map((r) => JSON.parse(r.payload) as StudyBlock)
   }
+  // Sections are derived on demand from the whole index: the PDF's bookmarks,
+  // headings judged against the document's body style, and the user's edits.
+  // Blocks passed in receive their section and their document-level role.
   sections(documentHash: string, blocks = this.blocks(documentHash)): StudySection[] {
     const row = this.db
       .query<{ outline: string }, [string]>("SELECT outline FROM documents WHERE hash=?")
       .get(documentHash)
     const outline = row ? (JSON.parse(row.outline) as PdfOutlineNode[]) : []
-    const bookmarks: PdfOutlineNode[] = []
-    const flatten = (nodes: PdfOutlineNode[]) => {
-      for (const node of nodes) {
-        if (node.pageNumber) bookmarks.push(node)
-        flatten(node.children)
-      }
-    }
-    flatten(outline)
+    const structure = analyzeStructure(blocks, outline)
     const sections: StudySection[] = []
-    const hasHeadings = blocks.some((block) => block.role === "heading")
     const resolveAnchor = (id: string, anchor?: SectionAnchor) => {
       if (blocks.some((block) => block.id === id)) return id
       if (!anchor) return id
@@ -238,57 +259,70 @@ export class StudyStore {
       ...boundary,
       blockId: resolveAnchor(boundary.blockId, boundary.anchor),
     }))
+    const structured = structure.boundaries.size > 0 || boundaries.some((boundary) => boundary.title)
+    const ancestors: StudySection[] = []
     let active: StudySection | undefined
+    const referenceLists = new Set<string>()
     blocks.forEach((block, index) => {
-      const bookmark = bookmarks.find((b) => b.pageNumber === block.pageIndex + 1)
-      const pageStart = !index || blocks[index - 1]?.pageIndex !== block.pageIndex
       const boundary = boundaries.find((b) => b.blockId === block.id)
-      const title =
+      const detected = structure.boundaries.get(block.id) ?? []
+      // Only headings confirmed against the whole document keep the heading role.
+      if (detected.some((start) => start.isHeading)) block.role = "heading"
+      else if (block.role === "heading") block.role = "paragraph"
+      const starts =
         boundary?.hidden && index > 0
-          ? null
-          : (boundary?.title ??
-            (block.role === "heading"
-              ? block.rawText.replace(/\s+/g, " ").trim()
-              : !hasHeadings && pageStart && bookmark
-                ? bookmark.title
-                : !active
-                  ? hasHeadings
-                    ? "문서 정보"
-                    : `페이지 ${block.pageIndex + 1}부터`
-                  : null))
-      if (title) {
+          ? []
+          : boundary?.title
+            ? [{ title: boundary.title, level: active?.level ?? 1, source: "user" as const }]
+            : detected.length
+              ? detected
+              : !active
+                ? [
+                    {
+                      title:
+                        structure.documentTitle ??
+                        (structured ? "문서 정보" : `페이지 ${block.pageIndex + 1}부터`),
+                      level: 1,
+                      source: "page" as const,
+                    },
+                  ]
+                : []
+      starts.forEach((start, position) => {
+        while ((ancestors.at(-1)?.level ?? 0) >= start.level) ancestors.pop()
+        const parent = ancestors.at(-1)
+        const id = position ? `S-${block.id}-${position}` : `S-${block.id}`
+        const edit =
+          edits.find((s) => s.id === id) ??
+          (position ? undefined : edits.find((s) => resolveAnchor(s.startBlockId, s.anchor) === block.id))
+        const title = edit?.title ?? start.title
         active = {
-          id: `S-${block.id}`,
+          id,
           title,
           startBlockId: block.id,
           endBlockId: block.id,
           pageStart: block.pageIndex + 1,
           pageEnd: block.pageIndex + 1,
-          source: boundary?.title
-            ? "user"
-            : block.role === "heading"
-              ? "heading"
-              : bookmark && !hasHeadings
-                ? "bookmark"
-                : "page",
-          userEdited: !!boundary?.title,
+          source: edit ? "user" : start.source,
+          userEdited: !!boundary?.title || !!edit,
+          level: start.level,
+          parentId: parent?.id ?? null,
+          kind:
+            !sections.length && start.source === "page" ? "front" : sectionKind(title, parent?.kind ?? null),
         }
-        const edit = edits.find(
-          (s) => s.id === active?.id || resolveAnchor(s.startBlockId, s.anchor) === active?.startBlockId,
-        )
-        if (edit) {
-          active.title = edit.title
-          active.userEdited = true
-          active.source = "user"
-        }
+        if (isReferenceList(title) || (parent && referenceLists.has(parent.id))) referenceLists.add(id)
+        ancestors.push(active)
         sections.push(active)
-      }
+      })
       if (active) {
         active.endBlockId = block.id
         active.pageEnd = block.pageIndex + 1
         block.sectionId = active.id
+        if (referenceLists.has(active.id) && block.role === "paragraph") block.role = "reference"
       }
     })
+    // A document without any structure is one body section, not front matter.
+    const [only] = sections
+    if (sections.length === 1 && only?.kind === "front") only.kind = "body"
     return sections
   }
   splitSection(documentHash: string, blockId: string, title: string) {

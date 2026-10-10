@@ -1,6 +1,7 @@
 import {
   BookOpen,
   ChevronDown,
+  ChevronRight,
   FileText,
   Merge,
   MoreHorizontal,
@@ -8,11 +9,32 @@ import {
   RefreshCw,
   Scissors,
 } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react"
 import type { EvidenceRef, StudyEvent, StudySection, StudySnapshot } from "../../../../shared/study/contracts"
 import { actionAnswers } from "../../../../shared/study/conversation"
 import { rpc } from "../../rpc"
 import { CitationChip } from "./CitationChip"
+
+// Outline numbers ("2", "2.1"), subtree page ends and child counts for the tree.
+function sectionOutline(sections: StudySection[]) {
+  const counters: number[] = []
+  return sections.map((section, index) => {
+    let end = index
+    while ((sections[end + 1]?.level ?? 0) > section.level) end++
+    const pageEnd = Math.max(...sections.slice(index, end + 1).map((s) => s.pageEnd))
+    let label = ""
+    if (section.kind !== "front") {
+      counters.length = section.level
+      for (let i = 0; i < section.level; i++) counters[i] ??= 0
+      counters[section.level - 1] = (counters[section.level - 1] ?? 0) + 1
+      label =
+        section.level === 1
+          ? String(counters[0]).padStart(2, "0")
+          : counters.slice(0, section.level).join(".")
+    }
+    return { label, pageEnd, descendants: end - index }
+  })
+}
 
 type SplitEditor = {
   sectionId: string
@@ -52,6 +74,8 @@ export function SectionList({
   const [split, setSplit] = useState<SplitEditor | null>(null)
   const [editing, setEditing] = useState(false)
   const [pendingSummaryId, setPendingSummaryId] = useState<string | null>(null)
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
+  const outline = useMemo(() => sectionOutline(snapshot?.sections ?? []), [snapshot?.sections])
   const menuTrigger = useRef<HTMLButtonElement | null>(null)
   const titleInput = useRef<HTMLInputElement>(null)
   const splitSelect = useRef<HTMLSelectElement>(null)
@@ -125,6 +149,17 @@ export function SectionList({
       <p className="study-muted section-list-hint">제목을 눌러 요약을 펼치고, 함께 공부해 보세요.</p>
       <ol className="section-list" aria-label="문서 섹션">
         {snapshot?.sections.map((section, index) => {
+          const ancestorCollapsed = (() => {
+            let parentId = section.parentId
+            while (parentId) {
+              if (collapsed.has(parentId)) return true
+              parentId = snapshot.sections.find((s) => s.id === parentId)?.parentId ?? null
+            }
+            return false
+          })()
+          if (ancestorCollapsed) return null
+          const shape = outline[index] ?? { label: "", pageEnd: section.pageEnd, descendants: 0 }
+          const childrenHidden = collapsed.has(section.id)
           const summary = answers
             .filter(
               (message) =>
@@ -169,11 +204,32 @@ export function SectionList({
               key={section.id}
               data-expanded={expanded}
               data-menu-open={menuId === section.id}
+              data-level={section.level}
+              data-kind={section.kind}
+              style={{ "--section-depth": Math.min(section.level, 4) - 1 } as CSSProperties}
             >
               <div className="section-row-heading">
-                <span className="section-number" aria-hidden="true">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
+                {shape.descendants ? (
+                  <button
+                    type="button"
+                    className="section-tree-toggle"
+                    aria-expanded={!childrenHidden}
+                    aria-label={`${section.title} 하위 섹션 ${shape.descendants}개 ${childrenHidden ? "펼치기" : "접기"}`}
+                    onClick={() => {
+                      const next = new Set(collapsed)
+                      if (childrenHidden) next.delete(section.id)
+                      else next.add(section.id)
+                      setCollapsed(next)
+                    }}
+                  >
+                    <ChevronRight size={11} aria-hidden="true" />
+                    <span>{shape.label}</span>
+                  </button>
+                ) : (
+                  <span className="section-number" aria-hidden="true">
+                    {shape.label || "·"}
+                  </span>
+                )}
                 <h3>
                   <button
                     type="button"
@@ -194,8 +250,17 @@ export function SectionList({
                   title={`${sourceLabel} · PDF 목차와 본문 제목에서 찾은 구조입니다.`}
                 >
                   p. {section.pageStart}
-                  {section.pageEnd !== section.pageStart ? `–${section.pageEnd}` : ""}
+                  {shape.pageEnd !== section.pageStart ? `–${shape.pageEnd}` : ""}
                   {section.userEdited ? " · 수정함" : ""}
+                  {section.kind === "back" && (
+                    <span
+                      className="section-kind"
+                      title="참고문헌·선언 같은 부가 정보는 문서 전체 요약·학습 목표·학습에서 기본으로 제외됩니다. 이 섹션을 직접 고르면 다룰 수 있습니다."
+                    >
+                      부가 정보
+                    </span>
+                  )}
+                  {section.kind === "front" && <span className="section-kind">제목·저자</span>}
                 </span>
                 <div className="section-row-actions">
                   <button

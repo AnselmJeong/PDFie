@@ -32,7 +32,16 @@ function wordRuns(columns = 2, lines = 32, words = 20) {
 }
 
 function styledLines(
-  lines: Array<{ text: string; y: number; height: number; bold?: boolean; blue?: boolean; x?: number }>,
+  lines: Array<{
+    text: string
+    y: number
+    height: number
+    bold?: boolean
+    blue?: boolean
+    x?: number
+    font?: string
+    weight?: number
+  }>,
 ) {
   const geometry: PdfPageGeometry = { runs: [] }
   const texts: string[] = []
@@ -62,9 +71,9 @@ function styledLines(
       fontSize: 1,
       rect: { origin: { x, y: line.y }, size: { width, height: line.height } },
       font: {
-        name: line.bold ? "Bold" : "Roman",
+        name: line.font ?? (line.bold ? "Bold" : "Roman"),
         familyName: "Test",
-        weight: line.bold ? 800 : 400,
+        weight: line.weight ?? (line.bold ? 800 : 400),
         italic: false,
         monospaced: false,
         embedded: true,
@@ -146,6 +155,24 @@ describe("native page analysis", () => {
     expect(groupNativeRuns(geometry, texts, 612, 791, rich).every((block) => block.role !== "heading")).toBe(
       true,
     )
+  })
+  it("reads bold from font names and keeps a body-size bold line apart from its paragraph", () => {
+    const { geometry, texts, rich } = styledLines([
+      { text: "The preceding paragraph ends without a gap before", y: 100, height: 10 },
+      { text: "the next line of the same paragraph.", y: 111, height: 10 },
+      { text: "Entropy increases under psilocybin", y: 122, height: 10, font: "Helvetica-Bold", weight: 0 },
+      { text: "Diagnoses and symptom severity measures have tended to adopt", y: 133, height: 10 },
+      { text: "a single-dimension model of consciousness.", y: 144, height: 10 },
+    ])
+    const blocks = groupNativeRuns(geometry, texts, 612, 791, rich)
+    expect(blocks.map((block) => block.rawText.split("\n")[0])).toEqual([
+      "The preceding paragraph ends without a gap before",
+      "Entropy increases under psilocybin",
+      "Diagnoses and symptom severity measures have tended to adopt",
+    ])
+    expect(blocks[1]?.style).toMatchObject({ bold: 1, font: expect.stringContaining("Helvetica-Bold") })
+    expect(blocks[0]?.style).toMatchObject({ bold: 0, size: 10 })
+    expect(blocks[0]?.style?.top).toBeCloseTo(100 / 791, 2)
   })
   it("keeps bold table captions separate from section headings", () => {
     const { geometry, texts, rich } = styledLines([

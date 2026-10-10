@@ -1,7 +1,7 @@
 import type { PdfOutlineNode, PdfRect, PdfSelection } from "../pdf/domain"
 import type { IntelligentLessonStep, WidgetState } from "./intelligent-ui"
 
-export const INDEX_VERSION = "native-styled-headings-v3"
+export const INDEX_VERSION = "native-structure-v4"
 export const MAX_PAGE_ANALYSIS_BYTES = 4_000_000
 export const MAX_PAGE_BLOCKS = 10_000
 export const analysisByteLength = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length
@@ -11,6 +11,20 @@ export interface ModelInfo {
   label: string
   vision: boolean
   isDefault?: boolean
+}
+/** Typography of a block, kept so headings can be judged against the whole document. */
+export interface BlockStyle {
+  /** Font size of the first line in points, or its visible glyph height when the PDF reports none. */
+  size: number
+  /** Share (0–1) of characters set in a bold, colored or italic face. */
+  bold: number
+  colored: number
+  italic: number
+  /** Font name and color of the first line. */
+  font: string
+  /** First-line position as a share of the page height and width. */
+  top: number
+  left: number
 }
 export interface StudyBlock {
   id: string
@@ -24,6 +38,7 @@ export interface StudyBlock {
   quality: "usable" | "uncertain"
   order: number
   sectionId: string
+  style?: BlockStyle
 }
 export interface PageAnalysis {
   pageIndex: number
@@ -42,7 +57,13 @@ export interface StudySection {
   pageEnd: number
   source: "bookmark" | "heading" | "page" | "user"
   userEdited: boolean
+  /** 1 for top-level sections; nested subsections are deeper. */
+  level: number
+  parentId: string | null
+  /** Front matter, study body, or back matter such as references and declarations. */
+  kind: SectionKind
 }
+export type SectionKind = "front" | "body" | "back"
 export interface IndexStatus {
   revision: string
   pageCount: number

@@ -3,12 +3,19 @@ import type { PdfDocumentObject, PdfPageGeometry, PdfTask, PdfTextRun } from "@e
 import type { PdfOutlineNode, PdfRect } from "../../../../../shared/pdf/domain"
 import {
   analysisByteLength,
+  type BlockStyle,
   INDEX_VERSION,
   MAX_PAGE_ANALYSIS_BYTES,
   MAX_PAGE_BLOCKS,
   type PageAnalysis,
   type StudyBlock,
 } from "../../../../../shared/study/contracts"
+import {
+  CAPTION_PATTERN,
+  headingScore,
+  isBoldFont,
+  isItalicFont,
+} from "../../../../../shared/study/section-structure"
 
 interface NativeAccess {
   getCoreDocument(id: string): { document?: PdfDocumentObject } | null
@@ -35,14 +42,33 @@ export function groupNativeRuns(
     })
     .sort((a, b) => a - b)
   const median = sizes[Math.floor(sizes.length / 2)] ?? 12
+  // Typographic size: the run's font size when the page reports real sizes,
+  // otherwise visible glyph height, which PDFium rounds to whole units.
+  const textRuns = geometry.runs.filter((run) => run.glyphs.some((g) => g.flags !== 2 && g.height > 0))
+  const reportsPoints =
+    textRuns.length > 0 &&
+    textRuns.filter((run) => (run.fontSize ?? 0) > 3 && (run.fontSize ?? 0) < 200).length >=
+      textRuns.length * 0.8
+  const runSize = (run: PdfPageGeometry["runs"][number]): number =>
+    reportsPoints && run.fontSize
+      ? run.fontSize
+      : (run.glyphs.find((g) => g.height > 3 && g.flags !== 2)?.height ?? median)
+  const bodySizes = reportsPoints
+    ? textRuns
+        .flatMap((run) => Array(Math.min(run.glyphs.length, 200)).fill(runSize(run)) as number[])
+        .sort((a, b) => a - b)
+    : sizes
+  const bodySize = bodySizes[Math.floor(bodySizes.length / 2)] ?? median
   type Line = {
     text: string
     rects: PdfRect[]
     height: number
+    size: number
     order: number
     characters: number
     bold: number
     colored: number
+    italic: number
     style: string
   }
   const lines: Line[] = []
@@ -65,7 +91,8 @@ export function groupNativeRuns(
       style.charIndex < run.charStart + run.glyphs.length &&
       style.charIndex + style.charCount > run.charStart
     const characters = text.replace(/\s/g, "").length
-    const bold = matches && style.font.weight >= 600 ? characters : 0
+    const bold = matches && isBoldFont(style.font) ? characters : 0
+    const italic = matches && isItalicFont(style.font) ? characters : 0
     const color = matches ? style.color : undefined
     const colored =
       color &&
@@ -122,58 +149,55 @@ export function groupNativeRuns(
       left.y = Math.min(left.y, right.y)
       left.height = bottom - left.y
       previous.height = Math.max(previous.height, right.height)
+      previous.size = Math.max(previous.size, runSize(run))
       previous.characters += characters
       previous.bold += bold
       previous.colored += colored
+      previous.italic += italic
       if (!previous.style) previous.style = styleKey
     } else {
       lines.push({
         text,
         rects,
         height: Math.max(0, ...rects.map((r) => r.height)),
+        size: runSize(run),
         order,
         characters,
         bold,
         colored,
+        italic,
         style: styleKey,
       })
     }
     separator = ""
   })
   const blocks: StudyBlock[] = []
-  const headingStyles = new Map<StudyBlock, string>()
+  // Per-block typography accumulated over its lines.
+  const totals = new Map<StudyBlock, { characters: number; bold: number; colored: number; italic: number }>()
+  const emphasis = (line: Line) =>
+    `${line.bold / Math.max(1, line.characters) >= 0.7}/${line.colored / Math.max(1, line.characters) >= 0.7}`
+  const blockEmphasis = new Map<StudyBlock, string>()
   for (const line of lines) {
     const rawText = line.text.trim()
     if (!/[\p{L}\p{N}]/u.test(rawText)) continue
-    const knownHeading =
-      /^(?:abstract|introduction|methods?|results?|discussion|conclusions?|references|acknowledg(?:e)?ments|funding|competing interests|data availability|초록|서론|방법|결과|고찰|결론|참고문헌)$/iu.test(
-        rawText,
-      )
-    const numberedHeading = /^\d{1,2}(?:\.\d{1,2})*\.?\s+[\p{Lu}\p{Script=Hangul}]/u.test(rawText)
-    const byline = /\p{L}\d+(?:,\d+)*$/u.test(rawText)
-    const caption = /^(?:fig(?:ure)?\.?|table|그림|표)\s*\d/iu.test(rawText)
     const rect = line.rects[0]
-    const margin = rect && (rect.y < height * 0.05 || rect.y > height * 0.96)
+    const share = (value: number) => Math.round((value / Math.max(1, line.characters)) * 100) / 100
+    const lineStyle: BlockStyle = {
+      size: Math.round(line.size * 100) / 100,
+      bold: share(line.bold),
+      colored: share(line.colored),
+      italic: share(line.italic),
+      font: line.style.slice(0, 300),
+      top: rect ? Math.round((rect.y / height) * 1000) / 1000 : 0,
+      left: rect ? Math.round((rect.x / width) * 1000) / 1000 : 0,
+    }
+    const caption = CAPTION_PATTERN.test(rawText)
+    const reference = !caption && /^\[?\d+\]?\s+.+(?:doi|\d{4})/i.test(rawText)
+    // A page-level estimate; the study index confirms headings against the
+    // whole document's body style, numbering and bookmarks.
     const heading =
-      !caption &&
-      !byline &&
-      !margin &&
-      rawText.length < 220 &&
-      !/[.!?。]$/.test(rawText) &&
-      (knownHeading ||
-        (richRuns?.length
-          ? line.bold / Math.max(1, line.characters) >= 0.7 &&
-            (line.colored / Math.max(1, line.characters) >= 0.7 ||
-              line.height > median * 1.25 ||
-              numberedHeading)
-          : line.height > median * 1.3 || numberedHeading))
-    const role = heading
-      ? "heading"
-      : caption
-        ? "caption"
-        : /^\[?\d+\]?\s+.+(?:doi|\d{4})/i.test(rawText)
-          ? "reference"
-          : "paragraph"
+      !caption && !reference && headingScore(rawText, "paragraph", 1, lineStyle, { bodySize }) >= 3
+    const role = heading ? "heading" : caption ? "caption" : reference ? "reference" : "paragraph"
     const quality =
       line.rects.length && rawText.length <= 12000 && !rawText.includes("�") && line.rects.length <= 300
         ? "usable"
@@ -182,16 +206,21 @@ export function groupNativeRuns(
     const first = previous?.rects[0],
       last = previous?.rects.at(-1),
       next = line.rects[0]
-    // Only continue down the same column. Indentation and extra vertical space
-    // start a new paragraph; never union a rectangle across multiple lines.
+    // Only continue down the same column. Indentation, extra vertical space and
+    // a change of emphasis start a new block; never union a rectangle across lines.
     if (
       previous &&
       first &&
       last &&
       next &&
       line.rects.length === 1 &&
-      ((role === "paragraph" && previous.role === "paragraph") ||
-        (role === "heading" && previous.role === "heading" && line.style === headingStyles.get(previous))) &&
+      ((role === "paragraph" &&
+        previous.role === "paragraph" &&
+        blockEmphasis.get(previous) === emphasis(line)) ||
+        (role === "heading" &&
+          previous.role === "heading" &&
+          line.style === previous.style?.font &&
+          Math.abs(line.size - (previous.style?.size ?? 0)) <= Math.max(0.5, line.size * 0.06))) &&
       next.y - last.y >= Math.min(last.height, next.height) * 0.65 &&
       next.y - last.y <= Math.max(last.height, next.height) * 1.65 &&
       Math.abs(next.x - first.x) <= median * 0.6 &&
@@ -202,6 +231,13 @@ export function groupNativeRuns(
       previous.rawText += `\n${rawText}`
       previous.rects.push(next)
       if (quality === "uncertain") previous.quality = quality
+      const total = totals.get(previous)
+      if (total) {
+        total.characters += line.characters
+        total.bold += line.bold
+        total.colored += line.colored
+        total.italic += line.italic
+      }
       continue
     }
     const block: StudyBlock = {
@@ -216,9 +252,24 @@ export function groupNativeRuns(
       role,
       quality,
       sectionId: "",
+      style: lineStyle,
     }
     blocks.push(block)
-    if (role === "heading") headingStyles.set(block, line.style)
+    blockEmphasis.set(block, emphasis(line))
+    totals.set(block, {
+      characters: line.characters,
+      bold: line.bold,
+      colored: line.colored,
+      italic: line.italic,
+    })
+  }
+  for (const block of blocks) {
+    const total = totals.get(block)
+    if (!block.style || !total) continue
+    const share = (value: number) => Math.round((value / Math.max(1, total.characters)) * 100) / 100
+    block.style.bold = share(total.bold)
+    block.style.colored = share(total.colored)
+    block.style.italic = share(total.italic)
   }
   return blocks
 }
