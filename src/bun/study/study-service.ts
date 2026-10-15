@@ -93,6 +93,9 @@ export class StudyService {
           : null,
     }
   }
+  get busy() {
+    return this.#active !== null
+  }
   isActive(hash: string) {
     return this.#active?.hash === hash
   }

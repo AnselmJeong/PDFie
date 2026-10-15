@@ -272,7 +272,6 @@ export function App() {
       onOpenPdf={() => void openPdf()}
       opening={opening}
       currentHash={source?.documentHash}
-      initialHash={source?.documentHash}
       onReturn={source ? () => setView("reader") : undefined}
       onDeleted={(hash) => {
         if (hash === source?.documentHash) void closePdf().catch(() => setSource(null))

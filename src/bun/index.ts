@@ -15,6 +15,7 @@ import { StudyStore } from "./persistence/study-store"
 import { linkLibraryPdf } from "./study/library-source"
 import { exportStudyMarkdown } from "./study/study-export"
 import { StudyService } from "./study/study-service"
+import { TopicClassifier } from "./study/topic-classifier"
 
 const sourceBridge = new PdfSourceBridge()
 await sourceBridge.start()
@@ -33,6 +34,14 @@ const providers = { "ollama-cloud": new OllamaProvider(aiSettings), codex }
 let sendStudyEvent: (event: StudyEvent) => void = () => undefined
 const study = new StudyService(studyStore, aiSettings, providers, captureStore, (event) =>
   sendStudyEvent(event),
+)
+const classifier = new TopicClassifier(
+  studyStore,
+  library,
+  aiSettings,
+  providers,
+  () => study.busy,
+  recordsChanged,
 )
 const documentHash = (id: string) => sourceBridge.getSource(id).documentHash
 
@@ -99,7 +108,20 @@ function createAppRpc() {
     maxRequestTime: 60_000,
     handlers: {
       requests: {
-        "library.list": async (query) => library.list(query),
+        "library.list": async (query) => {
+          classifier.wake()
+          return library.list(query)
+        },
+        "library.classify": async ({ documentHash: hash }) => {
+          classifier.request(hash)
+          return { queued: true }
+        },
+        "library.facets": async ({ archived }) => library.facets(archived),
+        "library.collection.save": async ({ name, id }) => library.saveCollection(name, id),
+        "library.collection.delete": async ({ id }) => {
+          library.deleteCollection(id)
+          return { saved: true }
+        },
         "library.detail": async ({ documentHash: hash }) => library.detail(hash),
         "library.update": async ({ documentHash: hash, ...patch }) => {
           library.update(hash, patch)
@@ -179,8 +201,20 @@ function createAppRpc() {
             completedPages: studyStore.completedPages(hash),
           }
         },
-        "study.index.page": async ({ documentId, page }) => studyStore.ingest(documentHash(documentId), page),
-        "study.generate": async (params) => study.start(documentHash(params.documentId), params),
+        "study.index.page": async ({ documentId, page }) => {
+          const hash = documentHash(documentId)
+          const index = studyStore.ingest(hash, page)
+          classifier.indexed(hash)
+          return index
+        },
+        "study.generate": async (params) => {
+          await classifier.pause()
+          try {
+            return study.start(documentHash(params.documentId), params)
+          } finally {
+            classifier.resume()
+          }
+        },
         "study.job.status": async ({ documentId, requestId }) =>
           study.jobStatus(documentHash(documentId), requestId),
         "study.goal.save": async ({ documentId, goal }) => {
@@ -301,6 +335,11 @@ function createAppRpc() {
         "ai.settings.get": async () => aiSettings.status(),
         "ai.settings.update": async (params) => {
           const saved = await aiSettings.update(params)
+          if (params.provider || params.selectedModel !== undefined || params.apiKey) {
+            await classifier.pause()
+            library.retryFailedClassifications()
+            classifier.resume()
+          }
           for (const window of appWindows()) window.webview.rpc?.proxy.send["ai.settings.changed"](saved)
           if (saved.provider === "codex" && (params.provider || params.selectedModel !== undefined))
             void refreshProviderStatus()
@@ -334,12 +373,18 @@ function appWindows() {
 }
 let providerRefresh: ReturnType<CodexProvider["status"]> | null = null
 let providerRefreshQueued = false
+let classificationConnected = false
 async function refreshProviderStatus() {
   if (providerRefresh) return providerRefresh
   const refresh = codex.status(aiSettings.status().selectedModel)
   providerRefresh = refresh
   try {
     const status = await refresh
+    if (status.generationAvailable && !classificationConnected) {
+      library.retryFailedClassifications()
+      classifier.wake()
+    }
+    classificationConnected = status.generationAvailable === true
     for (const window of appWindows()) window.webview.rpc?.proxy.send["ai.provider.changed"](status)
     return status
   } finally {
@@ -398,6 +443,7 @@ installApplicationMenu(
 mainWindow.on("close", () => settingsWindow?.close())
 
 Electrobun.events.on("before-quit", () => {
+  void classifier.close()
   void study.stop()
   codex.close()
   sourceBridge.close()

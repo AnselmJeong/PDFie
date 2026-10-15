@@ -6,7 +6,6 @@ import {
   FileText,
   FolderOpen,
   MoreHorizontal,
-  Search,
   Settings2,
   Star,
   Trash2,
@@ -18,13 +17,16 @@ import type { CaptureAsset, EvidenceRef, StudyMessage } from "../../../../shared
 import { actionAnswers, conversationMessages } from "../../../../shared/study/conversation"
 import type {
   LibraryDetail,
-  LibraryDocument,
+  LibraryFacets,
   LibraryPage,
+  LibraryPatch,
   LibraryQuery,
 } from "../../../../shared/study/library"
 import { rpc } from "../../rpc"
 import { CitationChip } from "./CitationChip"
 import { LessonPlayer } from "./LessonPlayer"
+import { EMPTY_FACETS, LibraryCatalog } from "./LibraryCatalog"
+import { LibraryOrganization } from "./LibraryOrganization"
 
 const date = (value: string) =>
   Date.parse(value) > 0
@@ -131,7 +133,6 @@ export function StudyLibrary({
   onDeleted,
   opening,
   currentHash,
-  initialHash,
 }: {
   onOpenPdf: () => void
   onOpenResult: (result: PdfOpenResult, evidence?: EvidenceRef) => Promise<void>
@@ -139,14 +140,16 @@ export function StudyLibrary({
   onDeleted: (hash: string) => void
   opening: boolean
   currentHash?: string
-  initialHash?: string
 }) {
   const [query, setQuery] = useState("")
   const [filter, setFilter] = useState<NonNullable<LibraryQuery["filter"]>>("all")
   const [sort, setSort] = useState<NonNullable<LibraryQuery["sort"]>>("recent")
+  const [topic, setTopic] = useState<string | undefined>()
+  const [collectionId, setCollectionId] = useState<string | undefined>()
+  const [facets, setFacets] = useState<LibraryFacets>(EMPTY_FACETS)
   const [page, setPage] = useState<LibraryPage>({ items: [], total: 0 })
   const [loading, setLoading] = useState(true)
-  const [selected, setSelected] = useState<string | null>(initialHash ?? null)
+  const [selected, setSelected] = useState<string | null>(null)
   const [detail, setDetail] = useState<LibraryDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [tab, setTab] = useState<"lessons" | "goals" | "notes">("lessons")
@@ -175,13 +178,19 @@ export function StudyLibrary({
       const sequence = ++listSequence.current
       setLoading(true)
       try {
-        const next = await rpc.request["library.list"]({
-          query,
-          filter,
-          sort,
-          offset: more ? pageRef.current.items.length : 0,
-        })
+        const [next, nextFacets] = await Promise.all([
+          rpc.request["library.list"]({
+            query,
+            filter,
+            sort,
+            topic,
+            collectionId,
+            offset: more ? pageRef.current.items.length : 0,
+          }),
+          rpc.request["library.facets"]({ archived: filter === "archived" }),
+        ])
         if (sequence !== listSequence.current) return
+        setFacets(nextFacets)
         setPage((previous) => ({ ...next, items: more ? [...previous.items, ...next.items] : next.items }))
       } catch (cause) {
         if (sequence === listSequence.current) report(cause)
@@ -189,7 +198,7 @@ export function StudyLibrary({
         if (sequence === listSequence.current) setLoading(false)
       }
     },
-    [query, filter, sort, report],
+    [query, filter, sort, topic, collectionId, report],
   )
   const loadDetail = useCallback(
     async (hash: string, fresh = false) => {
@@ -217,8 +226,13 @@ export function StudyLibrary({
   // Query changes invalidate in-flight responses immediately; debounce only the new request.
   useEffect(() => {
     listSequence.current += 1
+    setLoading(true)
+    setPage({ items: [], total: 0 })
     const timer = window.setTimeout(() => void loadList(), 180)
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(timer)
+      listSequence.current += 1
+    }
   }, [loadList])
   useEffect(() => {
     if (!selected) {
@@ -276,7 +290,7 @@ export function StudyLibrary({
     if (selected) void loadDetail(selected)
     void loadList()
   }
-  const update = (patch: { title?: string; favorite?: boolean; archived?: boolean }) =>
+  const update = (patch: LibraryPatch) =>
     void run(async () => {
       if (!selected) return
       await rpc.request["library.update"]({ documentHash: selected, ...patch })
@@ -329,109 +343,57 @@ export function StudyLibrary({
         </div>
       </header>
       <div className="library-workspace">
-        <aside className="library-catalog" aria-label="논문별 학습 자료">
-          <div className="library-search">
-            <Search size={16} />
-            <input
-              aria-label="서재 검색"
-              placeholder="논문, 개념, 수업 내용 검색"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            {query && (
-              <button type="button" aria-label="검색 지우기" onClick={() => setQuery("")}>
-                <X size={13} />
-              </button>
-            )}
+        <div className="library-browse-surface" hidden={Boolean(selected)}>
+          <LibraryCatalog
+            page={page}
+            facets={facets}
+            loading={loading}
+            query={{ query, filter, sort, topic, collectionId }}
+            onQuery={(patch) => {
+              if (patch.query !== undefined) setQuery(patch.query)
+              if (patch.filter !== undefined) setFilter(patch.filter)
+              if (patch.sort !== undefined) setSort(patch.sort)
+              if ("topic" in patch) setTopic(patch.topic)
+              if ("collectionId" in patch) setCollectionId(patch.collectionId)
+            }}
+            onSelect={setSelected}
+            onMore={() => void loadList(true)}
+            currentHash={currentHash}
+            onOpenPdf={onOpenPdf}
+            opening={opening}
+            onCollectionSave={async (name, id) => {
+              try {
+                await rpc.request["library.collection.save"]({ name, id })
+                await loadList()
+                return true
+              } catch (cause) {
+                report(cause)
+                return false
+              }
+            }}
+            onCollectionDelete={async (id) => {
+              try {
+                await rpc.request["library.collection.delete"]({ id })
+                await loadList()
+                return true
+              } catch (cause) {
+                report(cause)
+                return false
+              }
+            }}
+          />
+        </div>
+        <section
+          className="library-detail"
+          hidden={!selected}
+          aria-label="선택한 학습 자료"
+          aria-busy={detailLoading}
+        >
+          <div className="library-detail-back">
+            <button type="button" onClick={() => setSelected(null)}>
+              <ArrowLeft size={15} /> 서재로 돌아가기
+            </button>
           </div>
-          <nav className="library-filters" aria-label="서재 필터">
-            {(
-              [
-                ["all", "전체"],
-                ["lessons", "수업 있는 자료"],
-                ["favorites", "즐겨찾기"],
-                ["archived", "보관함"],
-              ] as const
-            ).map(([id, label]) => (
-              <button type="button" key={id} aria-pressed={filter === id} onClick={() => setFilter(id)}>
-                {label}
-              </button>
-            ))}
-          </nav>
-          <div className="library-list-heading">
-            <span>{page.total}개 자료</span>
-            <select
-              aria-label="자료 정렬"
-              value={sort}
-              onChange={(e) => setSort(e.target.value === "title" ? "title" : "recent")}
-            >
-              <option value="recent">최근 학습순</option>
-              <option value="title">제목순</option>
-            </select>
-          </div>
-          <div className="library-document-list" aria-busy={loading}>
-            {page.items.map((item: LibraryDocument) => (
-              <button
-                type="button"
-                className="library-document"
-                key={item.documentHash}
-                aria-current={selected === item.documentHash ? "true" : undefined}
-                onClick={() => setSelected(item.documentHash)}
-              >
-                <span className="library-document-heading">
-                  <span>{item.title}</span>
-                  {item.favorite && <Star size={13} fill="currentColor" aria-label="즐겨찾기" />}
-                </span>
-                <span className="library-document-counts">
-                  수업 {item.lessonCount} · 목표 {item.goalCount} · 설명 {item.messageCount}
-                </span>
-                <span className="library-document-meta">
-                  <time>{date(item.updatedAt)}</time>
-                  {item.documentHash === currentHash ? (
-                    <span data-source="reading">읽는 중</span>
-                  ) : !item.sourceAvailable ? (
-                    <span data-source="missing">원문 없이 복습 가능</span>
-                  ) : (
-                    <span>PDF 연결됨</span>
-                  )}
-                </span>
-              </button>
-            ))}
-            {!loading && !page.items.length && (
-              <div className="library-list-empty">
-                <p>
-                  {query
-                    ? "검색 결과가 없습니다."
-                    : filter === "all"
-                      ? "첫 학습 자료를 쌓아 보세요."
-                      : "이 목록에 자료가 없습니다."}
-                </p>
-                <small>
-                  {query
-                    ? "제목과 저장된 수업·대화 내용을 검색합니다."
-                    : "PDF에서 만든 수업과 설명이 이곳에 모입니다."}
-                </small>
-              </div>
-            )}
-            {loading && (
-              <p className="library-loading" role="status">
-                자료 불러오는 중…
-              </p>
-            )}
-            {page.items.length < page.total && (
-              <button
-                type="button"
-                className="library-load-more"
-                disabled={loading}
-                onClick={() => void loadList(true)}
-              >
-                더 보기
-              </button>
-            )}
-          </div>
-          <footer className="library-catalog-footer">수업과 근거 발췌는 이 Mac에 저장됩니다.</footer>
-        </aside>
-        <section className="library-detail" aria-label="선택한 학습 자료" aria-busy={detailLoading}>
           {detailLoading ? (
             <p className="library-loading" role="status">
               학습 내용 불러오는 중…
@@ -602,6 +564,13 @@ export function StudyLibrary({
                   </div>
                 )}
               </header>
+              <LibraryOrganization
+                key={doc.documentHash}
+                document={doc}
+                facets={facets}
+                onSaved={refresh}
+                onError={setError}
+              />
               <nav className="library-content-tabs" aria-label="저장된 학습 내용">
                 {(
                   [
@@ -815,33 +784,33 @@ export function StudyLibrary({
               )}
             </>
           )}
-          {error && (
-            <div className="library-feedback is-error" role="alert">
-              <span>{error}</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setError(null)
-                  refresh()
-                }}
-              >
-                다시 확인
-              </button>
-              <button type="button" aria-label="오류 닫기" onClick={() => setError(null)}>
-                <X size={14} />
-              </button>
-            </div>
-          )}
-          {notice && (
-            <div className="library-feedback" role="status">
-              <span>{notice}</span>
-              <button type="button" aria-label="알림 닫기" onClick={() => setNotice("")}>
-                <X size={14} />
-              </button>
-            </div>
-          )}
         </section>
       </div>
+      {error && (
+        <div className="library-feedback is-error" role="alert">
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setError(null)
+              refresh()
+            }}
+          >
+            다시 확인
+          </button>
+          <button type="button" aria-label="오류 닫기" onClick={() => setError(null)}>
+            <X size={14} />
+          </button>
+        </div>
+      )}
+      {notice && (
+        <div className="library-feedback" role="status">
+          <span>{notice}</span>
+          <button type="button" aria-label="알림 닫기" onClick={() => setNotice("")}>
+            <X size={14} />
+          </button>
+        </div>
+      )}
     </main>
   )
 }

@@ -16,15 +16,26 @@ import type {
   StudyJobStatus,
   StudySnapshot,
 } from "../study/contracts"
-import type { LibraryDetail, LibraryPage, LibraryQuery } from "../study/library"
+import type {
+  LibraryCollection,
+  LibraryDetail,
+  LibraryFacets,
+  LibraryPage,
+  LibraryPatch,
+  LibraryQuery,
+} from "../study/library"
 
 export type AppRPC = {
   bun: RPCSchema<{
     requests: {
+      "library.classify": { params: { documentHash: string }; response: { queued: true } }
       "library.list": { params: LibraryQuery; response: LibraryPage }
+      "library.facets": { params: { archived?: boolean }; response: LibraryFacets }
+      "library.collection.save": { params: { name: string; id?: string }; response: LibraryCollection }
+      "library.collection.delete": { params: { id: string }; response: { saved: true } }
       "library.detail": { params: { documentHash: string }; response: LibraryDetail }
       "library.update": {
-        params: { documentHash: string; title?: string; favorite?: boolean; archived?: boolean }
+        params: { documentHash: string } & LibraryPatch
         response: { saved: true }
       }
       "library.openPdf": {
