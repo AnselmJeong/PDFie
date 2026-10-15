@@ -1,6 +1,6 @@
 {
   "name": "pdfie",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "A focused macOS PDF reader for research papers and books",
@@ -16,7 +16,7 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "test": "vitest run && bun run test:bridge && bun run test:state && bun run test:study",
-    "test:study": "bun run scripts/test-study-platform.ts && bun run scripts/test-section-structure.ts && bun run scripts/test-study-library.ts && bun run scripts/test-library-organization.ts && bun run scripts/test-topic-classifier.ts && bun run scripts/test-intelligent-ui.ts && bun run scripts/test-source-recovery.ts",
+    "test:study": "bun run scripts/test-study-platform.ts && bun run scripts/test-section-structure.ts && bun run scripts/test-study-library.ts && bun run scripts/test-library-organization.ts && bun run scripts/test-topic-classifier.ts && bun run scripts/test-library-taxonomy.ts && bun run scripts/test-library-import.ts && bun run scripts/test-intelligent-ui.ts && bun run scripts/test-source-recovery.ts",
     "test:bridge": "bun run scripts/test-source-bridge.ts",
     "test:state": "bun run scripts/test-document-state.ts",
     "test:viewer": "vitest run tests/golden-selection"

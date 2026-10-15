@@ -80,7 +80,9 @@ export function LibraryOrganization({
                   : "AI 자동 분류"}
             {classification?.model && ` · ${classification.model}`}
           </p>
-          <p>{classification?.reason || "저장된 논문 본문을 바탕으로 자동 분류합니다."}</p>
+          {classification?.state !== "manual" && (
+            <p>{classification?.reason || "저장된 논문 본문을 바탕으로 자동 분류합니다."}</p>
+          )}
           {classification?.pages?.length ? (
             <p>본문 발췌 {classification.pages.length}개 페이지 기준 · 언제든 수정할 수 있습니다.</p>
           ) : null}

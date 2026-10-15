@@ -20,15 +20,26 @@ import type {
   LibraryCollection,
   LibraryDetail,
   LibraryFacets,
+  LibraryImportStatus,
   LibraryPage,
   LibraryPatch,
   LibraryQuery,
+  TopicChangePreview,
 } from "../study/library"
 
 export type AppRPC = {
   bun: RPCSchema<{
     requests: {
       "library.classify": { params: { documentHash: string }; response: { queued: true } }
+      "library.import.choose": { params: { kind: "files" | "folder" }; response: LibraryImportStatus }
+      "library.import.status": { params: Record<string, never>; response: LibraryImportStatus }
+      "library.import.cancel": { params: Record<string, never>; response: LibraryImportStatus }
+      "library.topics.preview": { params: { source: string; target: string }; response: TopicChangePreview }
+      "library.topics.apply": {
+        params: { source: string; target: string; token: string }
+        response: TopicChangePreview
+      }
+      "library.topics.undo": { params: Record<string, never>; response: { saved: true } }
       "library.list": { params: LibraryQuery; response: LibraryPage }
       "library.facets": { params: { archived?: boolean }; response: LibraryFacets }
       "library.collection.save": { params: { name: string; id?: string }; response: LibraryCollection }

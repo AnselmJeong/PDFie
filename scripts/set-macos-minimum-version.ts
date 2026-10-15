@@ -20,3 +20,13 @@ const add = Bun.spawnSync([
 ])
 if (add.exitCode !== 0) throw new Error(new TextDecoder().decode(add.stderr))
 console.log(`Set LSMinimumSystemVersion=14.0 in ${plistPath}`)
+
+// Bundle the isolated import worker beside the main process; it resolves PDFium from app resources.
+const worker = await Bun.build({
+  entrypoints: ["src/bun/pdf/import-worker.ts"],
+  outdir: join(bundlePath, "Contents/Resources/app/bun"),
+  target: "bun",
+  naming: "import-worker.js",
+  minify: true,
+})
+if (!worker.success) throw new Error(worker.logs.map(String).join("\n"))

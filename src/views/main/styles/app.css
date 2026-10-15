@@ -5314,3 +5314,96 @@ details > summary {
   margin: 4px 0 8px;
   overflow-wrap: anywhere;
 }
+
+.library-intake,
+.library-topics-manager {
+  flex-shrink: 0;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--background);
+  font-size: 12px;
+}
+.library-intake-toolbar,
+.library-topics-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.library-intake button,
+.library-topics-manager button,
+.library-topics-manager select,
+.library-topics-manager input {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 10px;
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+}
+.library-intake button:disabled,
+.library-topics-manager button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.library-intake-hint,
+.library-topics-manager > p {
+  color: var(--muted-foreground);
+}
+.library-intake-status {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  max-height: 230px;
+  overflow: auto;
+}
+.library-intake-status p,
+.library-topics-manager p {
+  margin: 6px 0;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.library-intake-status ul {
+  padding-left: 20px;
+}
+.library-intake-status progress {
+  width: min(100%, 420px);
+  accent-color: var(--primary);
+}
+.library-topics-manager summary {
+  cursor: pointer;
+  color: var(--muted-foreground);
+}
+.library-topics-fields {
+  margin: 12px 0;
+  align-items: end;
+}
+.library-topics-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.library-topics-fields input,
+.library-topics-fields select {
+  width: min(300px, 70vw);
+}
+.library-topics-preview {
+  border-left: 2px solid var(--border-strong);
+  padding-left: 12px;
+  margin-bottom: 12px;
+}
+.library-browse-surface {
+  display: flex;
+  flex-direction: column;
+}
+.library-browse-surface > .library-browser {
+  flex: 1;
+  height: auto;
+}
+.library-topics-manager {
+  max-height: 42vh;
+  overflow: auto;
+}

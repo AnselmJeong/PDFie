@@ -10,6 +10,7 @@ import type {
   LibraryQuery,
   TopicClassification,
 } from "../../shared/study/library"
+import { LibraryTaxonomy } from "./library-taxonomy"
 import type { StudyStore } from "./study-store"
 
 type CatalogRow = {
@@ -40,6 +41,7 @@ const columns = `l.*,
 
 /** Catalog identity is the PDF byte hash; review never needs an open PDF handle. */
 export class StudyLibrary {
+  readonly taxonomy: LibraryTaxonomy
   constructor(private store: StudyStore) {
     // Additive migration: retain every legacy lesson, answer, evidence and attempt.
     store.db.exec(`CREATE TABLE IF NOT EXISTS library_documents(
@@ -76,7 +78,9 @@ export class StudyLibrary {
         FROM library_organization WHERE topic!='';
       UPDATE library_classification SET payload=json_set(payload,'$.state','queued')
         WHERE json_extract(payload,'$.state')='running';
-      INSERT OR IGNORE INTO schema_migrations VALUES(4);`)
+      INSERT OR IGNORE INTO schema_migrations VALUES(4);
+      CREATE TABLE IF NOT EXISTS library_indexing(document_hash TEXT PRIMARY KEY);`)
+    this.taxonomy = new LibraryTaxonomy(store)
   }
   remember(hash: string, fileName: string, sourcePath: string | null) {
     const now = new Date().toISOString()
@@ -86,6 +90,13 @@ export class StudyLibrary {
       title=CASE WHEN library_documents.file_name='' THEN excluded.title ELSE library_documents.title END,
       file_name=excluded.file_name, source_path=COALESCE(excluded.source_path,library_documents.source_path)`)
       .run(hash, fileName.replace(/\.pdf$/i, ""), fileName, sourcePath, now, now)
+  }
+  contains(hash: string) {
+    return !!this.store.db.query("SELECT hash FROM library_documents WHERE hash=?").get(hash)
+  }
+  setIndexing(hash: string, value: boolean) {
+    if (value) this.store.db.query("INSERT OR IGNORE INTO library_indexing VALUES(?)").run(hash)
+    else this.store.db.query("DELETE FROM library_indexing WHERE document_hash=?").run(hash)
   }
   require(hash: string) {
     if (
@@ -223,7 +234,7 @@ export class StudyLibrary {
         this.store.db
           .query(`INSERT INTO library_organization VALUES(?,?)
       ON CONFLICT(document_hash) DO UPDATE SET topic=excluded.topic`)
-          .run(hash, topic)
+          .run(hash, topic ? this.taxonomy.ensure(topic) : "")
         this.setClassification(hash, { state: "manual", reason: "직접 지정한 주제" })
       }
       if (ids !== undefined) {
@@ -266,7 +277,7 @@ export class StudyLibrary {
         this.store.db
           .query(`INSERT INTO library_organization(document_hash,topic) VALUES(?,?)
         ON CONFLICT(document_hash) DO UPDATE SET topic=excluded.topic`)
-          .run(hash, this.label(topic))
+          .run(hash, this.taxonomy.ensure(this.label(topic)))
       return true
     })()
   }
@@ -274,7 +285,7 @@ export class StudyLibrary {
     return this.store.db
       .query<{ hash: string }, []>(`SELECT l.hash FROM library_documents l
       LEFT JOIN library_classification c ON c.document_hash=l.hash
-      WHERE l.archived=0 AND (c.document_hash IS NULL OR json_extract(c.payload,'$.state')='queued')
+      WHERE l.archived=0 AND NOT EXISTS(SELECT 1 FROM library_indexing i WHERE i.document_hash=l.hash) AND (c.document_hash IS NULL OR json_extract(c.payload,'$.state')='queued')
       ORDER BY l.created_at DESC,l.hash`)
       .all()
       .map((row) => row.hash)

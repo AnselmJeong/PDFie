@@ -30,6 +30,7 @@ const requiredFiles = [
   "Contents/Info.plist",
   "Contents/MacOS/launcher",
   "Contents/Resources/app/bun/index.js",
+  "Contents/Resources/app/bun/import-worker.js",
   "Contents/Resources/app/views/main/index.html",
   "Contents/Resources/app/views/main/settings.html",
   "Contents/Resources/app/views/main/index.js",

@@ -1,3 +1,4 @@
+import { access } from "node:fs/promises"
 import { join } from "node:path"
 import Electrobun, { BrowserView, BrowserWindow, Utils } from "electrobun/bun"
 import type { AppRPC } from "../shared/rpc/app-rpc"
@@ -7,11 +8,13 @@ import { CodexProvider } from "./ai/providers/codex-provider"
 import { OllamaProvider } from "./ai/providers/ollama-provider"
 import { installApplicationMenu } from "./app-menu"
 import { CaptureStore } from "./assets/capture-store"
+import { backgroundIndexer } from "./pdf/background-index"
 import { PdfSourceBridge } from "./pdf/document-source-bridge"
 import { DocumentStateRepository } from "./pdf/document-state-repository"
-import { restoreSingleSelectedPath } from "./pdf/open-file-dialog"
+import { restoreMultipleSelectedPaths, restoreSingleSelectedPath } from "./pdf/open-file-dialog"
 import { StudyLibrary } from "./persistence/study-library"
 import { StudyStore } from "./persistence/study-store"
+import { LibraryImporter } from "./study/library-importer"
 import { linkLibraryPdf } from "./study/library-source"
 import { exportStudyMarkdown } from "./study/study-export"
 import { StudyService } from "./study/study-service"
@@ -42,6 +45,13 @@ const classifier = new TopicClassifier(
   providers,
   () => study.busy,
   recordsChanged,
+)
+const importer = new LibraryImporter(
+  studyStore,
+  library,
+  backgroundIndexer(studyStore),
+  recordsChanged,
+  (hash) => classifier.indexed(hash),
 )
 const documentHash = (id: string) => sourceBridge.getSource(id).documentHash
 
@@ -108,6 +118,54 @@ function createAppRpc() {
     maxRequestTime: 60_000,
     handlers: {
       requests: {
+        "library.import.choose": async ({ kind }) => {
+          if (kind !== "files" && kind !== "folder") throw new Error("가져오기 종류를 확인하세요.")
+          const state = importer.status()
+          if (state.phase === "scanning" || state.phase === "importing")
+            throw new Error("진행 중인 가져오기를 먼저 완료하거나 중지하세요.")
+          const selected = await Utils.openFileDialog({
+            startingFolder: Utils.paths.home,
+            allowedFileTypes: kind === "files" ? "pdf" : "",
+            canChooseFiles: kind === "files",
+            canChooseDirectory: kind === "folder",
+            allowsMultipleSelection: kind === "files",
+          })
+          const paths =
+            kind === "folder"
+              ? [restoreSingleSelectedPath(selected)].filter((p): p is string => p !== null)
+              : await restoreMultipleSelectedPaths(selected, async (path) => {
+                  try {
+                    await access(path)
+                    return true
+                  } catch {
+                    return false
+                  }
+                })
+          return importer.start(paths)
+        },
+        "library.import.status": async () => importer.status(),
+        "library.import.cancel": async () => importer.cancel(),
+        "library.topics.preview": async ({ source, target }) => library.taxonomy.preview(source, target),
+        "library.topics.apply": async ({ source, target, token }) => {
+          await classifier.pause()
+          try {
+            const result = library.taxonomy.apply(source, target, token)
+            recordsChanged("")
+            return result
+          } finally {
+            classifier.resume()
+          }
+        },
+        "library.topics.undo": async () => {
+          await classifier.pause()
+          try {
+            library.taxonomy.undo()
+            recordsChanged("")
+            return { saved: true }
+          } finally {
+            classifier.resume()
+          }
+        },
         "library.list": async (query) => {
           classifier.wake()
           return library.list(query)
@@ -441,8 +499,10 @@ installApplicationMenu(
   () => mainWindow.webview.rpc?.proxy.send["library.openRequested"]({}),
 )
 mainWindow.on("close", () => settingsWindow?.close())
+importer.resume()
 
 Electrobun.events.on("before-quit", () => {
+  void importer.close()
   void classifier.close()
   void study.stop()
   codex.close()

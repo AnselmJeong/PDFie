@@ -27,6 +27,7 @@ export interface TopicClassification {
   provider?: string
   model?: string
   pages?: number[]
+  taxonomyRevision?: number
 }
 export interface LibraryQuery {
   query?: string
@@ -61,4 +62,28 @@ export interface LibraryPatch {
   archived?: boolean
   topic?: string
   collectionIds?: string[]
+}
+
+export interface LibraryImportStatus {
+  batchId: string | null
+  phase: "idle" | "scanning" | "importing" | "complete" | "cancelled"
+  total: number
+  added: number
+  duplicates: number
+  failed: number
+  pending: number
+  cancelled: number
+  active: { name: string; page: number; total: number } | null
+  notes: string[]
+  issues: { id: string; name: string; error: string }[]
+  classifications: { complete: number; pending: number; needsAttention: number }
+}
+
+export interface TopicChangePreview {
+  source: string
+  target: string
+  count: number
+  manualCount: number
+  merge: boolean
+  token: string
 }

@@ -26,7 +26,9 @@ import { rpc } from "../../rpc"
 import { CitationChip } from "./CitationChip"
 import { LessonPlayer } from "./LessonPlayer"
 import { EMPTY_FACETS, LibraryCatalog } from "./LibraryCatalog"
+import { LibraryIntake } from "./LibraryIntake"
 import { LibraryOrganization } from "./LibraryOrganization"
+import { LibraryTopics } from "./LibraryTopics"
 
 const date = (value: string) =>
   Date.parse(value) > 0
@@ -254,7 +256,8 @@ export function StudyLibrary({
       const value = (event as CustomEvent<{ documentHash: string; phase?: string }>).detail
       if (value.phase && !["completed", "stopped", "failed"].includes(value.phase)) return
       void loadList()
-      if (value.documentHash === selectedRef.current) void loadDetail(value.documentHash)
+      if (selectedRef.current && (!value.documentHash || value.documentHash === selectedRef.current))
+        void loadDetail(selectedRef.current)
     }
     window.addEventListener("pdfie:records-changed", changed)
     window.addEventListener("pdfie:study-event", changed)
@@ -342,8 +345,16 @@ export function StudyLibrary({
           </button>
         </div>
       </header>
+      <LibraryIntake />
       <div className="library-workspace">
         <div className="library-browse-surface" hidden={Boolean(selected)}>
+          <LibraryTopics
+            facets={facets}
+            onChanged={() => {
+              setTopic(undefined)
+              void loadList()
+            }}
+          />
           <LibraryCatalog
             page={page}
             facets={facets}
