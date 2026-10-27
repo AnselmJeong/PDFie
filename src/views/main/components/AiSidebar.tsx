@@ -12,7 +12,7 @@ import type {
   StudyTask,
 } from "../../../shared/study/contracts"
 import { conversationMessages } from "../../../shared/study/conversation"
-import { reusableGoalAnswer } from "../../../shared/study/goal-context"
+import { reusableGoalAnswer, savedGoalAnswer, savedGoalLesson } from "../../../shared/study/goal-context"
 import { sectionSummaryQuestion } from "../../../shared/study/section-summary"
 import { CitationChip } from "../features/study/CitationChip"
 import { GoalList } from "../features/study/GoalList"
@@ -72,6 +72,7 @@ export function AiSidebar({
   } = useAiConnection()
   const [snapshot, setSnapshot] = useState<StudySnapshot | null>(null)
   const [tab, setTab] = useState<Tab | "result">("goals")
+  const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null)
   const [actionView, setActionView] = useState<{
     requestId: string
     returnTab: Tab
@@ -92,7 +93,7 @@ export function AiSidebar({
     messagesEnd = useRef<HTMLDivElement>(null)
   const effectiveSelection = dismissed ? null : (quoted ?? selection)
   const conversation = conversationMessages(snapshot?.messages ?? [])
-  const goalAnswer = (goal: StudyGoal) => (snapshot ? reusableGoalAnswer(snapshot, goal) : undefined)
+  const goalAnswer = (goal: StudyGoal) => (snapshot ? savedGoalAnswer(snapshot, goal) : undefined)
   const displayedMessages =
     tab === "result"
       ? (snapshot?.messages.filter(
@@ -233,8 +234,10 @@ export function AiSidebar({
       setBusy({ documentHash: source.documentHash, requestId, phase: "retrieving" })
       setError(null)
       if (task === "goals") setTab("goals")
-      else if (task === "lesson") setTab("learning")
-      else if (task === "summary" && selectedScope.type === "section" && origin === "action")
+      else if (task === "lesson") {
+        setSelectedLessonId(null)
+        setTab("learning")
+      } else if (task === "summary" && selectedScope.type === "section" && origin === "action")
         setTab("sections")
       else if (origin === "action") {
         setActionView({
@@ -469,7 +472,10 @@ export function AiSidebar({
             aria-current={
               tab === id || (tab === "result" && actionView?.returnTab === id) ? "page" : undefined
             }
-            onClick={() => setTab(id)}
+            onClick={() => {
+              if (id === "learning") setSelectedLessonId(null)
+              setTab(id)
+            }}
           >
             {label}
           </button>
@@ -487,6 +493,7 @@ export function AiSidebar({
             const goal = snapshot?.goals.find((item) => item.id === goalId)
             return !!goal && !!goalAnswer(goal)
           }}
+          hasLesson={(goalId) => !!snapshot?.lessons.some((lesson) => lesson.goalId === goalId)}
           onRegenerate={() =>
             void generate(
               "goals",
@@ -497,7 +504,6 @@ export function AiSidebar({
             )
           }
           onExplain={(goal) => {
-            if (!goal.explored) void saveGoal({ ...goal, explored: true })
             const saved = goalAnswer(goal)
             if (saved) {
               setActionView({ requestId: saved.id, returnTab: "goals", title: "목표 설명" })
@@ -507,7 +513,12 @@ export function AiSidebar({
             void generate("chat", goal.question, goalScope(goal), goal.id, null)
           }}
           onStudy={(goal) => {
-            void saveGoal({ ...goal, explored: true })
+            const saved = snapshot && savedGoalLesson(snapshot, goal)
+            if (saved) {
+              setSelectedLessonId(saved.id)
+              setTab("learning")
+              return
+            }
             void generate(
               "lesson",
               `${goal.question}\n이해 점검: ${goal.checkQuestion}`,
@@ -582,11 +593,14 @@ export function AiSidebar({
                 <h2>{actionView.title}</h2>
                 {displayedMessages[0]?.goalId && (
                   <div className="study-actions">
-                    {displayedMessages[0].evidence[0]?.revision !== snapshot?.index.revision && (
-                      <p className="study-muted">
-                        이전 원문 분할로 만든 설명입니다. 새 원문으로 다시 작성할 수 있습니다.
-                      </p>
-                    )}
+                    {snapshot &&
+                      !snapshot.goals.some(
+                        (goal) => reusableGoalAnswer(snapshot, goal)?.id === displayedMessages[0]?.id,
+                      ) && (
+                        <p className="study-muted">
+                          이전에 저장한 설명입니다. 현재 질문·원문 분석 기준으로 다시 작성할 수 있습니다.
+                        </p>
+                      )}
                     <button
                       type="button"
                       disabled={!ready}
@@ -698,13 +712,39 @@ export function AiSidebar({
           <section className="learning-panel">
             <span className="study-eyebrow">예측하고, 확인하고, 설명하기</span>
             <h2>Interactive Learning</h2>
+            {selectedLessonId && (
+              <div className="study-actions">
+                <button type="button" onClick={() => setSelectedLessonId(null)}>
+                  전체 학습 보기
+                </button>
+                <button
+                  type="button"
+                  disabled={!ready}
+                  onClick={() => {
+                    const lesson = snapshot?.lessons.find((item) => item.id === selectedLessonId)
+                    const goal = snapshot?.goals.find((item) => item.id === lesson?.goalId)
+                    if (goal)
+                      void generate(
+                        "lesson",
+                        `${goal.question}\n이해 점검: ${goal.checkQuestion}`,
+                        goalScope(goal),
+                        goal.id,
+                        null,
+                      )
+                  }}
+                >
+                  학습 새로 만들기
+                </button>
+              </div>
+            )}
             {!snapshot?.lessons.length && (
               <p className="study-empty-note">
-                학습 목표나 섹션의 “함께 공부하기”로 시작하세요. 논문에 맞는 비교, 개념 관계도,
-                근거 지도와 맞춤 실험을 원문 근거와 함께 탐구하고 이해를 점검합니다.
+                학습 목표나 섹션의 “함께 공부하기”로 시작하세요. 논문에 맞는 비교, 개념 관계도, 근거 지도와
+                맞춤 실험을 원문 근거와 함께 탐구하고 이해를 점검합니다.
               </p>
             )}
             {snapshot?.lessons
+              .filter((lesson) => !selectedLessonId || lesson.id === selectedLessonId)
               .slice()
               .reverse()
               .map((lesson) => (

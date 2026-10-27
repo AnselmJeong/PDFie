@@ -332,6 +332,12 @@ export class StudyService {
       base.state = "completed"
       delete base.draftText
       this.store.put(hash, "messages", request.requestId, base)
+      if (request.goalId && (request.task === "chat" || request.task === "lesson")) {
+        const currentGoal = this.store
+          .list<StudyGoal>(hash, "goals")
+          .find((goal) => goal.id === request.goalId)
+        if (currentGoal) this.store.put(hash, "goals", currentGoal.id, { ...currentGoal, explored: true })
+      }
       notify("completed")
     } catch (cause) {
       base.state = controller.signal.aborted ? "stopped" : "failed"
@@ -359,7 +365,7 @@ export class StudyService {
       throw new Error("학습 목표를 확인하세요.")
     const old = this.store.list<StudyGoal>(hash, "goals").find((g) => g.id === goal.id)
     const next = old
-      ? { ...old, question: goal.question, explored: goal.explored, userEdited: true }
+      ? { ...old, question: goal.question, userEdited: old.userEdited || old.question !== goal.question }
       : {
           ...goal,
           evidenceIds: [],

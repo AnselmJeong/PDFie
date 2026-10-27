@@ -1,14 +1,24 @@
+import { createElement } from "react"
+import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
 import { resolveEvidenceBlocks, retrieve, retrieveGoal } from "../../src/bun/retrieval/context"
 import type {
   EvidenceRef,
+  LessonSpec,
   StudyBlock,
   StudyGoal,
   StudyMessage,
   StudySection,
   StudySnapshot,
 } from "../../src/shared/study/contracts"
-import { GOAL_CONTEXT_VERSION, goalEvidence, reusableGoalAnswer } from "../../src/shared/study/goal-context"
+import {
+  GOAL_CONTEXT_VERSION,
+  goalEvidence,
+  reusableGoalAnswer,
+  savedGoalAnswer,
+  savedGoalLesson,
+} from "../../src/shared/study/goal-context"
+import { GoalList } from "../../src/views/main/features/study/GoalList"
 
 const block = (
   id: string,
@@ -228,6 +238,65 @@ describe("goal source context", () => {
 })
 
 describe("saved goal explanation reuse", () => {
+  it("opens legacy and reindexed explanations without treating them as current generated answers", () => {
+    const legacy = message()
+    const state = snapshot([
+      legacy,
+      message({ id: "failed", state: "failed" }),
+      message({ id: "other", goalId: "other" }),
+    ])
+    expect(savedGoalAnswer(state, goal)).toBe(legacy)
+    expect(reusableGoalAnswer(state, goal)).toBeUndefined()
+    const reindexed = message({
+      goalContext: { version: GOAL_CONTEXT_VERSION, question: goal.question, indexRevision: "old" },
+    })
+    expect(savedGoalAnswer(snapshot([reindexed]), goal)).toBe(reindexed)
+    expect(savedGoalAnswer(snapshot([legacy]), { ...goal, question: "편집한 질문" })).toBe(legacy)
+  })
+
+  it("keeps saved explanations and lessons accessible while generation is unavailable", () => {
+    const lesson: LessonSpec = {
+      id: "saved-lesson",
+      goalId: goal.id,
+      schemaVersion: 1,
+      title: "기존 학습",
+      objectives: [],
+      prerequisites: [],
+      steps: [],
+      dataKind: "paper",
+      evidence: [],
+      revision: "old",
+      model: "test",
+      provider: "codex",
+      coverage: "이전 원문",
+      createdAt: "2026-10-10T00:00:00Z",
+    }
+    const state = { ...snapshot([message()]), lessons: [lesson, { ...lesson, id: "other", goalId: "other" }] }
+    expect(savedGoalLesson(state, goal)).toBe(lesson)
+    const html = renderToStaticMarkup(
+      createElement(GoalList, {
+        hidden: false,
+        snapshot: state,
+        evidence: [],
+        ready: false,
+        unavailableReason: "오프라인",
+        busy: false,
+        hasExplanation: () => !!savedGoalAnswer(state, goal),
+        hasLesson: () => !!savedGoalLesson(state, goal),
+        onRegenerate: () => {},
+        onExplain: () => {},
+        onStudy: () => {},
+        onSave: async () => true,
+        onReorder: () => {},
+        onDelete: () => {},
+        onReveal: () => {},
+      }),
+    )
+    expect(html).toMatch(/<button[^>]*class="goal-quiet-action">[\s\S]*?설명 확인<\/button>/)
+    expect(html).toMatch(/<button[^>]*class="goal-study-action">[\s\S]*?학습 이어보기<\/button>/)
+    expect(html).toContain("학습 준비됨")
+  })
+
   it("preserves legacy records but regenerates explanations made before passage retrieval or after edits/reindexing", () => {
     const context = { version: GOAL_CONTEXT_VERSION, question: goal.question, indexRevision: "new" }
     const old = message()

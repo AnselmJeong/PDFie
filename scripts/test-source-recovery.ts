@@ -126,7 +126,7 @@ try {
   assert.equal(calls.length, 1)
   const edited = store.snapshot(hash).goals[0]
   assert.ok(edited)
-  service.saveGoal(hash, { ...edited, explored: true })
+  service.saveGoal(hash, { ...edited, question: `직접 편집한 질문: ${edited.question}` })
   const preserved = JSON.stringify(store.snapshot(hash).goals[0])
   start("repair")
   assert.equal((await terminal.promise).phase, "completed")

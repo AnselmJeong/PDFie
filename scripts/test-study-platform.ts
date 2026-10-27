@@ -348,6 +348,14 @@ try {
   )
   assert.doesNotMatch(exportStudyMarkdown("Test", store.snapshot(hash)), /목표 탭에서 편집하거나/)
   const goal = store.snapshot(hash).goals[0]!
+  mode = "bad"
+  assert.equal((await run(request("chat", goal.id))).phase, "failed")
+  assert.equal(
+    store.snapshot(hash).goals[0]!.explored,
+    false,
+    "failed generation does not mark a goal explored",
+  )
+  assert.equal(store.snapshot(hash).goals[0]!.userEdited, false)
   mode = "chat"
   const goalExplanation = {
     ...request("chat", goal.id),
@@ -363,6 +371,11 @@ try {
   )
   assert.equal(goalPacket.goal.question, goal.question)
   assert.equal(store.snapshot(hash).messages.at(-1)?.goalContext?.version, GOAL_CONTEXT_VERSION)
+  assert.equal(store.snapshot(hash).goals[0]!.explored, true, "completed explanation marks exploration")
+  assert.equal(store.snapshot(hash).goals[0]!.userEdited, false, "generation is not a question edit")
+  service.saveGoal(hash, goal)
+  assert.equal(store.snapshot(hash).goals[0]!.explored, true, "stale editor state cannot erase exploration")
+  assert.equal(store.snapshot(hash).goals[0]!.userEdited, false, "saving unchanged text is not an edit")
   mode = "goals"
   service.saveGoal(hash, { ...goal, question: "My edited question", explored: true })
   await run(request("goals"))

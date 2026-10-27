@@ -2,6 +2,23 @@ import type { EvidenceRef, StudyGoal, StudyMessage, StudySnapshot } from "./cont
 
 export const GOAL_CONTEXT_VERSION = "linked-passages-v1"
 
+// Opening saved work is independent of whether it can be reused as a current answer.
+export function savedGoalAnswer(snapshot: StudySnapshot, goal: StudyGoal): StudyMessage | undefined {
+  return snapshot.messages
+    .filter(
+      (message) =>
+        message.role === "assistant" &&
+        message.task === "chat" &&
+        message.goalId === goal.id &&
+        message.state === "completed",
+    )
+    .at(-1)
+}
+
+export function savedGoalLesson(snapshot: StudySnapshot, goal: StudyGoal) {
+  return snapshot.lessons.filter((lesson) => lesson.goalId === goal.id).at(-1)
+}
+
 export function goalEvidence(snapshot: StudySnapshot, goal: StudyGoal): EvidenceRef[] {
   const ids = new Set(goal.evidenceIds)
   const evidence = new Map<string, EvidenceRef>()

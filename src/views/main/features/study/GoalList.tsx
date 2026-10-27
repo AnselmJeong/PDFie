@@ -24,6 +24,7 @@ export function GoalList({
   unavailableReason,
   busy,
   hasExplanation,
+  hasLesson,
   onRegenerate,
   onExplain,
   onStudy,
@@ -39,6 +40,7 @@ export function GoalList({
   unavailableReason: string
   busy: boolean
   hasExplanation: (goalId: string) => boolean
+  hasLesson: (goalId: string) => boolean
   onRegenerate: () => void
   onExplain: (goal: StudyGoal) => void
   onStudy: (goal: StudyGoal) => void
@@ -152,6 +154,8 @@ export function GoalList({
         {goals.map((goal, index) => {
           const expanded = expandedId === goal.id
           const editing = editor?.id === goal.id
+          const explanationSaved = hasExplanation(goal.id)
+          const lessonSaved = hasLesson(goal.id)
           const refs = goal.evidenceIds.flatMap((id) => {
             const ref = evidence.find((item) => item.id === id)
             return ref ? [ref] : []
@@ -191,15 +195,23 @@ export function GoalList({
                   ) : (
                     <Circle size={10} aria-hidden="true" />
                   )}
-                  {goal.checked ? "점검 통과" : goal.explored ? "탐색 중" : "탐색 전"}
+                  {goal.checked
+                    ? "점검 통과"
+                    : lessonSaved
+                      ? "학습 준비됨"
+                      : explanationSaved
+                        ? "설명 있음"
+                        : goal.explored
+                          ? "탐색 기록"
+                          : "탐색 전"}
                   {goal.userEdited && <span className="goal-edited"> · 편집함</span>}
                 </span>
                 <div className="goal-row-actions">
                   <button
                     type="button"
                     className="goal-quiet-action"
-                    disabled={!ready && !hasExplanation(goal.id)}
-                    title={!ready && !hasExplanation(goal.id) ? unavailableReason : undefined}
+                    disabled={!ready && !explanationSaved}
+                    title={!ready && !explanationSaved ? unavailableReason : undefined}
                     onClick={() => onExplain(goal)}
                   >
                     <FileText size={12} aria-hidden="true" />
@@ -208,12 +220,12 @@ export function GoalList({
                   <button
                     type="button"
                     className="goal-study-action"
-                    disabled={!ready}
-                    title={!ready ? unavailableReason : undefined}
+                    disabled={!ready && !lessonSaved}
+                    title={!ready && !lessonSaved ? unavailableReason : undefined}
                     onClick={() => onStudy(goal)}
                   >
                     <BookOpen size={13} aria-hidden="true" />
-                    함께 공부하기
+                    {lessonSaved ? "학습 이어보기" : "함께 공부하기"}
                   </button>
                   <div className="goal-more">
                     <button
