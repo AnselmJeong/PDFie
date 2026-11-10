@@ -6,24 +6,42 @@ const target = process.argv[2] ?? "build/stable-macos-arm64/PDFie.app"
 let inspectionTarget = target
 let temporaryDirectory: string | null = null
 
-try {
-  await access(join(target, "Contents/Resources/app"))
-} catch {
-  const resources = join(target, "Contents/Resources")
-  const payload = (await readdir(resources)).find((name) => name.endsWith(".tar.zst"))
-  if (!payload) throw new Error(`No unpacked app or stable payload found in ${target}`)
+/** Electrobun's bundled zstd, for runners without a system unzstd. */
+async function bundledZstd() {
+  const platform = process.platform === "darwin" ? "macos" : process.platform === "win32" ? "win" : "linux"
+  const arch = process.arch === "arm64" ? "arm64" : "x64"
+  const path = join("node_modules/electrobun", `dist-${platform}-${arch}`, "zig-zstd")
+  await access(path)
+  return path
+}
 
+// A stable build wraps the real app as a zstd payload inside a self-extracting
+// bundle; inspect the payload when there is one, else the unpacked app.
+const resources = join(target, "Contents/Resources")
+const payload = (await readdir(resources)).find((name) => name.endsWith(".tar.zst"))
+if (payload) {
   temporaryDirectory = await mkdtemp(join(tmpdir(), "pdfie-package-verify-"))
-  const extract = Bun.spawnSync([
-    "tar",
-    "--use-compress-program=unzstd",
-    "-xf",
-    join(resources, payload),
-    "-C",
-    temporaryDirectory,
-  ])
+  const tarPath = join(temporaryDirectory, "payload.tar")
+  const system = Bun.which("unzstd")
+  const decompress = system
+    ? Bun.spawnSync([system, "-q", "-f", "-o", tarPath, join(resources, payload)])
+    : Bun.spawnSync([
+        await bundledZstd(),
+        "decompress",
+        "-i",
+        join(resources, payload),
+        "-o",
+        tarPath,
+        "--no-timing",
+      ])
+  if (decompress.exitCode !== 0) throw new Error(new TextDecoder().decode(decompress.stderr))
+  const extract = Bun.spawnSync(["tar", "-xf", tarPath, "-C", temporaryDirectory])
   if (extract.exitCode !== 0) throw new Error(new TextDecoder().decode(extract.stderr))
-  inspectionTarget = join(temporaryDirectory, "PDFie.app")
+  const app = (await readdir(temporaryDirectory)).find((name) => name.endsWith(".app"))
+  if (!app) throw new Error(`The stable payload in ${target} holds no .app bundle`)
+  inspectionTarget = join(temporaryDirectory, app)
+} else {
+  await access(join(target, "Contents/Resources/app"))
 }
 
 const requiredFiles = [
@@ -80,6 +98,7 @@ console.log(
   JSON.stringify(
     {
       target,
+      inspected: payload ? `payload ${payload}` : "unpacked app",
       renderer: "native-webkit",
       cefBundled: false,
       fileCount: files.length,
