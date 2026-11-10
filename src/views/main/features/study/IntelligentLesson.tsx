@@ -1,3 +1,4 @@
+import { Slider } from "@astryxdesign/core/Slider"
 import type { EvidenceRef } from "../../../../shared/study/contracts"
 import { type IntelligentLessonStep, illustrativeSignal } from "../../../../shared/study/intelligent-ui"
 import { CitationChip } from "./CitationChip"
@@ -129,17 +130,18 @@ export function IntelligentLesson({
     <div className="lesson-signal">
       <p className="illustration-label">교육용 이진 가상 신호 · 뇌 신호나 논문 측정값이 아닙니다.</p>
       <p>{step.text}</p>
-      <label>
-        무작위 치환 비율: {Math.round(value * 100)}%
-        <input
-          type="range"
+      <div className="lesson-slider">
+        <Slider
+          label="무작위 치환 비율"
           min={0}
           max={1}
           step={0.05}
           value={value}
-          onChange={(e) => onValue(Number(e.target.value))}
+          valueDisplay="text"
+          formatValue={(next) => `${Math.round(next * 100)}%`}
+          onChange={(next: number) => onValue(next)}
         />
-      </label>
+      </div>
       <div className="lesson-signal-plots">
         <figure>
           <figcaption>규칙적 교대 신호</figcaption>

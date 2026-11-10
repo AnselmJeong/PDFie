@@ -1,12 +1,15 @@
 import { LayerProvider } from "@astryxdesign/core/Layer"
 import { Theme } from "@astryxdesign/core/theme"
-import { neutralTheme } from "@astryxdesign/theme-neutral/built"
 import React, { type ReactNode, useEffect, useState } from "react"
 import { createRoot } from "react-dom/client"
 import type { AppearanceMode } from "../../bun/ai/ai-settings-repository"
 import { App } from "./App"
 import { SettingsWindow } from "./components/SettingsWindow"
 import { rpc } from "./rpc"
+import { pdfieTheme } from "./theme/pdfie"
+import { installTitleBarZoom } from "./window-chrome"
+
+installTitleBarZoom(() => rpc.request["app.window.zoom"]({}))
 
 /** The saved appearance (system, light or dark) applies to every window. */
 function AppTheme({ children }: { children: ReactNode }) {
@@ -23,7 +26,7 @@ function AppTheme({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("pdfie:settings-changed", changed)
   }, [])
   return (
-    <Theme theme={neutralTheme} mode={mode}>
+    <Theme theme={pdfieTheme} mode={mode}>
       <LayerProvider toast={{ position: "bottomEnd", maxVisible: 3 }}>{children}</LayerProvider>
     </Theme>
   )

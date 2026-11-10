@@ -70,6 +70,7 @@ import type {
 } from "../../../../../shared/pdf/domain"
 import { toPdfSelection } from "../../../../../shared/pdf/selection"
 import type { CaptureAsset, EvidenceRef } from "../../../../../shared/study/contracts"
+import { DRAG, NO_DRAG } from "../../../window-chrome"
 import { CaptureOverlay } from "./CaptureOverlay"
 import { CleanSelectionLayer } from "./CleanSelectionLayer"
 import { EvidenceOverlay } from "./EvidenceOverlay"
@@ -791,18 +792,20 @@ function ReaderChrome({
   return (
     <section className="reader-shell" aria-label={`PDF reader: ${source.fileName}`}>
       {!chrome.focusMode && (
-        <header className="reader-titlebar">
+        <header className={`reader-titlebar ${DRAG}`}>
           <div className="titlebar-leading">
-            <IconButton
-              label={railOpen ? "탐색 패널 닫기" : "탐색 패널 열기"}
-              shortcut="⇧⌘T"
-              onClick={() => setRailOpen((value) => !value)}
-            >
-              {railOpen ? <PanelLeftClose size={17} /> : <PanelLeftOpen size={17} />}
-            </IconButton>
-            <IconButton label="학습 서재" shortcut="⌘L" onClick={chrome.onOpenLibrary}>
-              <LibraryBig size={17} />
-            </IconButton>
+            <span className={`titlebar-controls ${NO_DRAG}`}>
+              <IconButton
+                label={railOpen ? "탐색 패널 닫기" : "탐색 패널 열기"}
+                shortcut="⇧⌘T"
+                onClick={() => setRailOpen((value) => !value)}
+              >
+                {railOpen ? <PanelLeftClose size={17} /> : <PanelLeftOpen size={17} />}
+              </IconButton>
+              <IconButton label="학습 서재" shortcut="⌘L" onClick={chrome.onOpenLibrary}>
+                <LibraryBig size={17} />
+              </IconButton>
+            </span>
             <span className="titlebar-divider" aria-hidden="true" />
             <div className="document-heading">
               <strong title={source.fileName}>{displayTitle(source.fileName)}</strong>
@@ -816,7 +819,7 @@ function ReaderChrome({
             </div>
           </div>
 
-          <div className="titlebar-trailing">
+          <div className={`titlebar-trailing ${NO_DRAG}`}>
             <IconButton
               label="문서 검색"
               shortcut="⌘F"
@@ -1245,6 +1248,7 @@ function ReaderChrome({
               <ChevronDown size={16} />
             </IconButton>
           </nav>
+          {chrome.focusMode && <div className={`focus-drag-strip ${DRAG}`} aria-hidden="true" />}
           {chrome.focusMode && (
             <Button
               className="focus-exit"

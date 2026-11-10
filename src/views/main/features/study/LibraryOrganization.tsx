@@ -1,4 +1,6 @@
 import { Button } from "@astryxdesign/core/Button"
+import { CheckboxList, CheckboxListItem } from "@astryxdesign/core/CheckboxList"
+import { TextInput } from "@astryxdesign/core/TextInput"
 import { Sparkles } from "lucide-react"
 import { useEffect, useState } from "react"
 import type { LibraryDocument, LibraryFacets } from "../../../../shared/study/library"
@@ -22,6 +24,12 @@ export function LibraryOrganization({
   const [topicEdited, setTopicEdited] = useState(false)
   const classification = document.classification
   const pending = classification?.state === "queued" || classification?.state === "running"
+  // Existing topics that match what is typed, so papers reuse names instead of near-duplicates.
+  const query = topic.trim().toLowerCase()
+  const topicSuggestions = facets.topics
+    .map((item) => item.name)
+    .filter((name) => name !== topic && (!query || name.toLowerCase().includes(query)))
+    .slice(0, 6)
   useEffect(() => {
     if (!topicEdited) setTopic(document.topic)
   }, [document.topic, topicEdited])
@@ -53,24 +61,35 @@ export function LibraryOrganization({
           }
         }}
       >
-        <label htmlFor="paper-topic">주제</label>
-        <input
-          id="paper-topic"
-          list="library-topics"
-          maxLength={80}
+        <TextInput
+          label="주제"
           placeholder="예: 네트워크 신경과학"
           value={topic}
-          onChange={(event) => {
-            setTopic(event.target.value)
+          onChange={(value) => {
+            setTopic(value.slice(0, 80))
             setTopicEdited(true)
             setSaved(false)
           }}
         />
-        <datalist id="library-topics">
-          {facets.topics.map((item) => (
-            <option key={item.name} value={item.name} />
-          ))}
-        </datalist>
+        {topicSuggestions.length > 0 && (
+          <div className="topic-cleanup-targets">
+            <span>기존 주제</span>
+            {topicSuggestions.map((name) => (
+              <button
+                type="button"
+                key={name}
+                aria-pressed={topic === name}
+                onClick={() => {
+                  setTopic(name)
+                  setTopicEdited(true)
+                  setSaved(false)
+                }}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="library-topic-status" aria-live="polite">
           <p>
             {classification?.state === "complete"
@@ -114,26 +133,25 @@ export function LibraryOrganization({
           />
           <p>직접 수정해 저장한 주제는 자동으로 덮어쓰지 않습니다.</p>
         </div>
-        <fieldset>
-          <legend>컬렉션 · 여러 개 선택 가능</legend>
-          {facets.collections.map((item) => (
-            <label key={item.id}>
-              <input
-                type="checkbox"
-                checked={ids.includes(item.id)}
-                onChange={(event) => {
-                  setIds((previous) =>
-                    event.target.checked ? [...previous, item.id] : previous.filter((id) => id !== item.id),
-                  )
-                  setSaved(false)
-                }}
-              />
-              {item.name}
-            </label>
-          ))}
-          {!facets.collections.length && <p>서재 왼쪽의 ‘컬렉션 만들기’로 연구 묶음을 추가하세요.</p>}
-        </fieldset>
-        <div>
+        {facets.collections.length ? (
+          <CheckboxList
+            label="컬렉션"
+            description="여러 개를 고를 수 있습니다."
+            density="compact"
+            value={ids}
+            onChange={(values) => {
+              setIds(values)
+              setSaved(false)
+            }}
+          >
+            {facets.collections.map((item) => (
+              <CheckboxListItem key={item.id} value={item.id} label={item.name} />
+            ))}
+          </CheckboxList>
+        ) : (
+          <p className="library-organization-hint">서재 왼쪽의 ‘컬렉션 만들기’로 연구 묶음을 추가하세요.</p>
+        )}
+        <div className="library-organization-actions">
           <Button type="submit" size="sm" variant="primary" label="분류 저장" isLoading={saving} />
           {saved && <span role="status">저장했습니다.</span>}
         </div>

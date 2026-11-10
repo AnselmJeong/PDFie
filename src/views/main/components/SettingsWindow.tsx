@@ -14,6 +14,7 @@ import type { AppearanceMode } from "../../../bun/ai/ai-settings-repository"
 import type { ProviderId } from "../../../shared/study/contracts"
 import { loginDisabled, useAiConnection } from "../features/study/useAiConnection"
 import { rpc } from "../rpc"
+import { DRAG } from "../window-chrome"
 
 type Page = "connection" | "appearance"
 
@@ -140,6 +141,7 @@ export function SettingsWindow() {
 
   return (
     <div className="settings-window">
+      <div className={`settings-drag ${DRAG}`} aria-hidden="true" />
       <aside className="settings-sidebar">
         <div className="settings-sidebar-title">설정</div>
         <nav aria-label="설정 항목">

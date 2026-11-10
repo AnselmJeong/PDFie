@@ -71,8 +71,14 @@ Adopt [Astryx](https://github.com/meta/astryx) (`@astryxdesign/core` 0.7.11, MIT
 - Menus and tooltips use the Popover API and CSS anchor positioning (Astryx "Tier 1": Safari 26+). On macOS 14/15 this requires current Safari/WebKit updates; older WebKit opens and dismisses layers correctly but may not place them next to their trigger. The selected-text card is positioned by PDFie and unaffected.
 - Component docs are available offline: `bunx astryx component <Name>`, `bunx astryx docs <topic>`.
 
+### Follow-ups (phase 5)
+
+- **PDFie theme.** `src/views/main/theme/pdfie.source.ts` extends neutral with `defineTheme`, replacing Figtree (a Google Fonts download the CSP blocks) with the native macOS stack and Korean fallbacks. `bun run theme:build` writes the built module and stylesheet beside it (`pdfie.js`, `pdfie.css`, declarations); `bun run theme:check` fails when they are stale. The app loads `pdfie.css` as `astryx-theme.css`, sets `<html data-astryx-theme="pdfie">` and passes the built `pdfieTheme` to `<Theme>`, so the app stylesheet no longer overrides font tokens. Rebuild after upgrading Astryx. (Neutral's compact touch adaptation still names Figtree; it never applies on a Mac.)
+- **Inset window chrome.** Both windows use `titleBarStyle: "hiddenInset"`, so PDFie's title bars are the windows'. Title bars carry Electrobun's `electrobun-webkit-app-region-drag` class and every control cluster `…-no-drag` (`src/views/main/window-chrome.ts`); the study panel header, a strip at the top of the canvas in focus mode and the top of the settings window are drag regions too. Leading title-bar padding (`--traffic-light-inset`, 80px) leaves room for the window controls at their default position. Double-clicking empty title-bar space zooms the window through `app.window.zoom`. *To check on macOS:* the vertical alignment of the window controls with the 48px title bars (Electrobun's `trafficLightOffset` can move them) and dragging in full-screen.
+- **Classification form.** The topic is an Astryx `TextInput` with matching existing topics offered as chips (so papers reuse names); collections are a `CheckboxList`.
+- **Lesson widgets.** The illustrative signal and experiment inputs are Astryx `Slider`s with value text; the experiment saves when a drag ends.
+
 ## Possible follow-ups
 
-- A `defineTheme` extension of neutral (built with `astryx theme build`) if PDFie needs its own accent or component overrides.
-- Native title bar integration (`titleBarStyle: "hiddenInset"` with drag regions) so the reader's title bar becomes the window's, once it can be checked on macOS.
-- Interactive lesson widgets (`IntelligentLesson`) and the topic/collection inputs of the classification form still use styled native controls.
+- Tune `trafficLightOffset` once the inset title bars are checked on macOS.
+- Hide the leading inset in full-screen, where macOS hides the window controls.

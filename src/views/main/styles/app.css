@@ -2,7 +2,7 @@
  * PDFie styles on the Astryx design system.
  *
  * Load order (index.html): a layer statement, Astryx reset, components and the
- * neutral theme, then this file. Layers, lowest first:
+ * PDFie theme (extends neutral; theme/pdfie.source.ts), then this file. Layers, lowest first:
  *   reset → app-base → astryx-base → astryx-theme → app
  * Element defaults live in app-base so Astryx components win over them; the
  * app's own classes live in app. PDFie's historical token names are bridged
@@ -13,13 +13,7 @@
 @layer app {
   :root,
   [data-astryx-theme] {
-    /* Typography: native macOS text with Korean fallbacks. */
-    --font-family-body:
-      -apple-system, BlinkMacSystemFont, "SF Pro Text", "Pretendard Variable", Pretendard,
-      "Apple SD Gothic Neo", "Noto Sans KR", "Segoe UI", sans-serif;
-    --font-family-heading:
-      -apple-system, BlinkMacSystemFont, "SF Pro Display", "Pretendard Variable", Pretendard,
-      "Apple SD Gothic Neo", "Noto Sans KR", "Segoe UI", sans-serif;
+    /* Typography: body and heading families come from the PDFie theme (theme/pdfie.source.ts). */
     --font-serif: "Iowan Old Style", "Noto Serif KR", "AppleMyungjo", Georgia, serif;
     --font-mono: var(--font-family-code, ui-monospace, "SF Mono", Menlo, monospace);
 
@@ -83,6 +77,8 @@
       0 10px 28px -8px light-dark(oklch(0 0 0 / 14%), oklch(0 0 0 / 70%));
     --focus-ring: 0 0 0 3px color-mix(in srgb, var(--ring) 32%, transparent);
     --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    /* Room for the inset macOS window controls at a title bar's leading edge. */
+    --traffic-light-inset: 80px;
   }
 }
 
@@ -1079,11 +1075,7 @@
     font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
-  .lesson-experiment label {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
+
   .lesson-experiment output {
     display: block;
     margin: 14px 0;
@@ -1781,16 +1773,7 @@
   .lesson-connections li::marker {
     color: var(--subtle-foreground);
   }
-  .lesson-signal label {
-    display: grid;
-    gap: 10px;
-    margin: 18px 0;
-    font-size: 13px;
-    font-weight: 500;
-  }
-  .lesson-signal input {
-    width: 100%;
-  }
+
   .lesson-signal-plots figure {
     margin: 14px 0;
     padding: 12px;
@@ -1846,9 +1829,10 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 0 8px;
+    padding: 0 8px 0 var(--traffic-light-inset);
     border-bottom: 1px solid var(--border);
     background: var(--background);
+    user-select: none;
   }
   .titlebar-leading,
   .titlebar-trailing {
@@ -2595,9 +2579,10 @@
     grid-template-columns: minmax(180px, 1fr) minmax(240px, 480px) minmax(180px, 1fr);
     align-items: center;
     gap: 16px;
-    padding: 0 10px 0 14px;
+    padding: 0 10px 0 var(--traffic-light-inset);
     border-bottom: 1px solid var(--border);
     background: var(--background);
+    user-select: none;
   }
   .library-titlebar-leading,
   .library-titlebar-trailing {
@@ -3100,45 +3085,6 @@
     background: var(--card);
     font-size: 13px;
   }
-  .library-organization label {
-    font-size: 12.5px;
-    font-weight: 550;
-  }
-  .library-organization input:not([type="checkbox"]) {
-    height: 32px;
-    padding: 0 10px;
-    border: 1px solid var(--input);
-    border-radius: var(--radius-inner);
-    background: var(--background);
-    font-size: 13px;
-  }
-  .library-organization input:not([type="checkbox"]):focus-visible {
-    outline: 0;
-    border-color: var(--ring);
-    box-shadow: var(--focus-ring);
-  }
-
-  .library-organization fieldset {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 14px;
-    margin: 0;
-    padding: 10px 0 0;
-    border: 0;
-    border-top: 1px solid var(--border);
-  }
-  .library-organization legend {
-    padding: 0;
-    margin-bottom: 6px;
-    font-size: 12.5px;
-    font-weight: 550;
-  }
-  .library-organization fieldset label {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-weight: 400;
-  }
 
   .library-topic-status {
     display: flex;
@@ -3470,6 +3416,7 @@
    with text on the left and controls on the right. */
 
   .settings-window {
+    position: relative;
     display: grid;
     height: 100%;
     grid-template-columns: 184px minmax(0, 1fr);
@@ -3480,7 +3427,7 @@
     min-height: 0;
     flex-direction: column;
     gap: 4px;
-    padding: 18px 10px 14px;
+    padding: 46px 10px 14px;
     border-right: 1px solid var(--border);
     background: var(--sidebar);
   }
@@ -3543,7 +3490,7 @@
   .settings-main {
     min-height: 0;
     overflow-y: auto;
-    padding: 24px 28px 32px;
+    padding: 40px 28px 32px;
     scrollbar-gutter: stable;
   }
   .settings-main-header {
@@ -4002,5 +3949,54 @@
     align-items: center;
     gap: 6px;
     margin-top: 12px;
+  }
+  /* Inset window chrome: drag regions where a title bar is hidden or absent. */
+  .titlebar-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .focus-drag-strip {
+    position: absolute;
+    z-index: 15;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: 28px;
+  }
+  .settings-drag {
+    position: absolute;
+    z-index: 5;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: 36px;
+  }
+  .library-organization-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-top: 4px;
+    color: var(--success-foreground);
+    font-size: 12px;
+  }
+  .library-organization-hint {
+    margin: 0;
+    color: var(--muted-foreground);
+    font-size: 12px;
+  }
+  .library-organization .topic-cleanup-targets {
+    margin-top: -2px;
+  }
+  .lesson-slider {
+    margin: 18px 0;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-element);
+    background: var(--card);
+  }
+  .library-topic-status > button {
+    align-self: flex-start;
+    margin: 4px 0;
   }
 } /* @layer app */

@@ -37,6 +37,7 @@ import { LessonPlayer } from "../features/study/LessonPlayer"
 import { SectionList } from "../features/study/SectionList"
 import { useAiConnection } from "../features/study/useAiConnection"
 import { rpc } from "../rpc"
+import { DRAG, NO_DRAG } from "../window-chrome"
 
 const starterPrompts = [
   {
@@ -415,10 +416,10 @@ export function AiSidebar({
       }
     >
       <div className="sidebar-resize-handle" onPointerDown={resize} aria-hidden="true" />
-      <header className="ai-panel-header">
+      <header className={`ai-panel-header ${DRAG}`}>
         <TabList
           role="tablist"
-          className="ai-panel-tabs"
+          className={`ai-panel-tabs ${NO_DRAG}`}
           aria-label="학습 공간"
           size="md"
           value={tab === "result" ? (actionView?.returnTab ?? "chat") : tab}
@@ -432,6 +433,7 @@ export function AiSidebar({
           ))}
         </TabList>
         <IconButton
+          className={NO_DRAG}
           variant="ghost"
           label="학습 공간 닫기"
           tooltip="학습 공간 닫기 (⌘/)"

@@ -113,7 +113,14 @@ async function exportRecords(hash: string, title: string) {
   await Bun.write(path, exportStudyMarkdown(title, studyStore.snapshot(hash)))
   return { saved: true, path }
 }
-function createAppRpc() {
+interface ZoomableWindow {
+  isMaximized(): boolean
+  maximize(): void
+  unmaximize(): void
+}
+/** Each window's RPC resolves its own window lazily, after the window exists. */
+const zoomTargets: { main: ZoomableWindow | null } = { main: null }
+function createAppRpc(ownWindow: () => ZoomableWindow | null = () => null) {
   return BrowserView.defineRPC<AppRPC>({
     maxRequestTime: 60_000,
     handlers: {
@@ -237,6 +244,14 @@ function createAppRpc() {
         "app.settings.open": async ({ documentId }) => {
           openSettingsWindow(documentId)
           return { opened: true as const }
+        },
+        "app.window.zoom": async () => {
+          // Double-clicking an inset title bar zooms the window, as in other Mac apps.
+          const target = ownWindow()
+          if (!target) return { zoomed: false }
+          if (target.isMaximized()) target.unmaximize()
+          else target.maximize()
+          return { zoomed: true }
         },
         "app.settings.close": async () => {
           // Return the RPC response before its webview is destroyed.
@@ -422,9 +437,11 @@ const mainWindow = new BrowserWindow({
   title: "PDFie",
   url: "views://main/index.html",
   frame: { width: 1480, height: 940, x: 80, y: 60 },
-  titleBarStyle: "default",
-  rpc: createAppRpc(),
+  titleBarStyle: "hiddenInset",
+  rpc: createAppRpc(() => zoomTargets.main),
 })
+
+zoomTargets.main = mainWindow
 
 function appWindows() {
   return settingsWindow ? [mainWindow, settingsWindow] : [mainWindow]
@@ -476,8 +493,8 @@ function openSettingsWindow(documentId?: string) {
     title: "PDFie 설정",
     url: "views://main/settings.html",
     frame,
-    titleBarStyle: "default",
-    rpc: createAppRpc(),
+    titleBarStyle: "hiddenInset",
+    rpc: createAppRpc(() => settingsWindow),
   })
   settingsWindow = window
   const actualSize = window.getSize()

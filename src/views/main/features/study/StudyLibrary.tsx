@@ -39,6 +39,7 @@ import type {
   LibraryQuery,
 } from "../../../../shared/study/library"
 import { rpc } from "../../rpc"
+import { DRAG, NO_DRAG } from "../../window-chrome"
 import { AnswerBlocks } from "./AnswerBlocks"
 import { CitationChip } from "./CitationChip"
 import { LessonPlayer } from "./LessonPlayer"
@@ -335,10 +336,11 @@ export function StudyLibrary({
 
   return (
     <main className="study-library">
-      <header className="library-titlebar">
+      <header className={`library-titlebar ${DRAG}`}>
         <div className="library-titlebar-leading">
           {selected ? (
             <Button
+              className={NO_DRAG}
               variant="ghost"
               label="서재"
               tooltip="서재로 돌아가기"
@@ -354,7 +356,7 @@ export function StudyLibrary({
             </span>
           )}
         </div>
-        <div className="library-titlebar-search">
+        <div className={`library-titlebar-search ${NO_DRAG}`}>
           <TextInput
             type="search"
             label="서재 검색"
@@ -369,7 +371,7 @@ export function StudyLibrary({
             }}
           />
         </div>
-        <div className="library-titlebar-trailing">
+        <div className={`library-titlebar-trailing ${NO_DRAG}`}>
           {onReturn && (
             <Button
               variant="ghost"

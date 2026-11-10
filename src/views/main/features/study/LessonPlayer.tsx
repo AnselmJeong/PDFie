@@ -1,5 +1,6 @@
 import { Button } from "@astryxdesign/core/Button"
 import { IconButton } from "@astryxdesign/core/IconButton"
+import { Slider } from "@astryxdesign/core/Slider"
 import { ArrowLeft, ArrowRight, Check, Maximize2, Minimize2 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
@@ -234,24 +235,24 @@ export function LessonPlayer({
         <div className="lesson-experiment">
           <p className="illustration-label">교육용 가상값 · 논문에서 복원한 자료가 아닙니다.</p>
           <p>{step.text}</p>
-          <label>
-            입력: {value} {step.unit}
-            <input
-              type="range"
+          <div className="lesson-slider">
+            <Slider
+              label={`입력 (${step.unit})`}
               min={step.min}
               max={step.max}
               step={step.step}
               value={value}
-              disabled={pending}
-              onChange={(e) => {
-                const next = { ...currentState.current.parameters, [index]: Number(e.target.value) }
-                currentState.current.parameters = next
-                setParameters(next)
+              isDisabled={pending}
+              valueDisplay="text"
+              formatValue={(next) => `${next} ${step.unit}`}
+              onChange={(next: number) => {
+                const nextParameters = { ...currentState.current.parameters, [index]: next }
+                currentState.current.parameters = nextParameters
+                setParameters(nextParameters)
               }}
-              onPointerUp={() => void save(index, parameters)}
-              onKeyUp={() => void save(index, parameters)}
+              onChangeEnd={() => void save(index, currentState.current.parameters)}
             />
-          </label>
+          </div>
           <output>
             {step.formula === "linear" ? "y = 2x" : "표준오차 ∝ 1/√n"} →{" "}
             {experimentValue(step.formula, value).toFixed(3)}
