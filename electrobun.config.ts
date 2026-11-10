@@ -30,6 +30,8 @@ export default {
       "src/vendor/openintelligentui/LICENSE": "licenses/OpenIntelligentUI-LICENSE",
       "src/views/main/bootstrap.js": "views/main/bootstrap.js",
       "src/views/main/styles/app.css": "views/main/app.css",
+      "node_modules/@astryxdesign/core/dist/astryx.css": "views/main/astryx.css",
+      "node_modules/@astryxdesign/theme-neutral/dist/theme.css": "views/main/astryx-theme.css",
       "node_modules/@embedpdf/pdfium/dist/pdfium.wasm": "views/main/assets/pdfium.wasm",
       "tests/golden-selection/cases.json": "views/main/qa/golden-selection-cases.json",
     },

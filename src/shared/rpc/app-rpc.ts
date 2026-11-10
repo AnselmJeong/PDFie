@@ -1,5 +1,5 @@
 import type { RPCSchema } from "electrobun/bun"
-import type { AiSettingsStatus } from "../../bun/ai/ai-settings-repository"
+import type { AiSettingsStatus, AppearanceMode } from "../../bun/ai/ai-settings-repository"
 import type { PdfOpenResult, PdfTextHighlight } from "../pdf/domain"
 import type {
   CaptureAsset,
@@ -157,6 +157,7 @@ export type AppRPC = {
           selectedModel?: string
           sidebarWidth?: number
           sidebarFontSize?: number
+          appearance?: AppearanceMode
         }
         response: AiSettingsStatus
       }

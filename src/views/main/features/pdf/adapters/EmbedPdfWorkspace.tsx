@@ -1,3 +1,16 @@
+import { Button } from "@astryxdesign/core/Button"
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuDivider,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+} from "@astryxdesign/core/DropdownMenu"
+import { IconButton as AxIconButton } from "@astryxdesign/core/IconButton"
+import { Kbd } from "@astryxdesign/core/Kbd"
+import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl"
 import type { PluginRegistry } from "@embedpdf/core"
 import { EmbedPDF, useDocumentState } from "@embedpdf/core/react"
 import { usePdfiumEngine } from "@embedpdf/engines/react"
@@ -17,27 +30,37 @@ import { SearchLayer, useSearch } from "@embedpdf/plugin-search/react"
 import { useSelectionCapability } from "@embedpdf/plugin-selection/react"
 import { SpreadMode, useSpread } from "@embedpdf/plugin-spread/react"
 import { TilingLayer } from "@embedpdf/plugin-tiling/react"
-import { useZoom, ZoomMode } from "@embedpdf/plugin-zoom/react"
+import { useZoom } from "@embedpdf/plugin-zoom/react"
 import {
   Camera,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Columns2,
+  Download,
+  Ellipsis,
+  Focus,
   Highlighter,
+  LibraryBig,
   ListTree,
   Minus,
   PanelLeftClose,
   PanelLeftOpen,
+  Plus,
+  RectangleVertical,
   RotateCw,
   Search,
+  Settings2,
+  Sparkles,
   Square,
   Undo2,
   X,
-  ZoomIn,
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { type ClassificationResult, classifyPdfDocument } from "../../../../../shared/pdf/classification"
 import type {
+  DocumentType,
   PdfHighlightStyle,
   PdfOutlineNode,
   PdfSelection,
@@ -79,6 +102,20 @@ interface EmbedPdfWorkspaceProps {
   onHighlightsChange: (highlights: PdfTextHighlight[]) => void
   onStatusChange: (status: ReaderStatus) => void
   onClassificationChange: (classification: ClassificationResult) => void
+  chrome: ReaderChromeControls
+}
+
+/** App-level controls the reader's title bar and page dock expose. */
+export interface ReaderChromeControls {
+  aiOpen: boolean
+  onToggleAi: () => void
+  onOpenLibrary: () => void
+  documentType: DocumentType
+  onDocumentTypeChange: (type: Exclude<DocumentType, "unknown">) => void
+  onOpenSettings: () => void
+  onExport: () => void
+  focusMode: boolean
+  onToggleFocus: () => void
 }
 
 export interface ReaderStatus {
@@ -88,6 +125,16 @@ export interface ReaderStatus {
   rotation: number
   phase: "loading-engine" | "loading-document" | "ready" | "error"
   message?: string
+}
+
+/** File names often stand in for titles; drop the extension and separators. */
+function displayTitle(fileName: string) {
+  return (
+    fileName
+      .replace(/\.pdf$/i, "")
+      .replace(/[_]+/g, " ")
+      .trim() || fileName
+  )
 }
 
 function bookmarkPage(bookmark: PdfBookmarkObject): number | null {
@@ -166,23 +213,32 @@ function IconButton({
   onClick,
   children,
   disabled = false,
+  pressed,
+  shortcut,
+  className,
+  size = "md",
 }: {
   label: string
   onClick: () => void
   children: React.ReactNode
   disabled?: boolean
+  pressed?: boolean
+  shortcut?: string
+  className?: string
+  size?: "sm" | "md"
 }) {
   return (
-    <button
-      className="icon-button"
-      type="button"
-      aria-label={label}
-      title={label}
+    <AxIconButton
+      className={className}
+      variant="ghost"
+      size={size}
+      label={label}
+      tooltip={shortcut ? `${label} (${shortcut})` : label}
+      icon={children}
+      aria-pressed={pressed}
+      isDisabled={disabled}
       onClick={onClick}
-      disabled={disabled}
-    >
-      {children}
-    </button>
+    />
   )
 }
 
@@ -231,6 +287,7 @@ function ReaderChrome({
   revealRequest,
   captureRequest,
   onCapture,
+  chrome,
 }: EmbedPdfWorkspaceProps & { documentId: string; registry: PluginRegistry }) {
   const [evidence, setEvidence] = useState<EvidenceRef | null>(null)
   const [returnPage, setReturnPage] = useState<number | null>(null)
@@ -248,6 +305,7 @@ function ReaderChrome({
   const [outline, setOutline] = useState<PdfOutlineNode[]>([])
   const [outlineLoaded, setOutlineLoaded] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
+  const [pageDraft, setPageDraft] = useState<string | null>(null)
   const [selectionMenu, setSelectionMenu] = useState<PdfSelection | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const speech = useSelectionSpeech(setActionError)
@@ -576,10 +634,25 @@ function ReaderChrome({
         event.preventDefault()
         zoom?.zoomOut()
       }
+      // An open menu owns Escape; focus sits inside it while it is open.
+      if (event.key === "Escape" && document.activeElement?.closest("[role='menu']")) return
       if (event.key === "Escape") {
         speech.stop()
         if (selectionMenu) clearSelection()
         else if (railMode === "search") closeSearch()
+        else if (chrome.focusMode) chrome.onToggleFocus()
+      }
+      if (
+        event.code === "KeyF" &&
+        !mod &&
+        !event.altKey &&
+        !event.shiftKey &&
+        !event.isComposing &&
+        !isEditableKeyboardTarget(event.target)
+      ) {
+        event.preventDefault()
+        chrome.onToggleFocus()
+        return
       }
       if (
         mod &&
@@ -625,6 +698,8 @@ function ReaderChrome({
     copySelection,
     highlightSelection,
     speech.stop,
+    chrome.focusMode,
+    chrome.onToggleFocus,
   ])
 
   const renderPage = (page: PageLayout) => (
@@ -669,12 +744,10 @@ function ReaderChrome({
                     <SelectionActions
                       anchor={anchor}
                       key={selectionKey}
-                      onAskAI={() => askAboutSelection()}
-                      onSummarize={() =>
-                        askAboutSelection("선택한 구절을 3–5개의 핵심 항목으로 간결하게 요약해 주세요.")
-                      }
+                      onAskAI={(prompt) => askAboutSelection(prompt ?? null)}
                       hasHighlight={Boolean(existingHighlight)}
                       existingNote={existingHighlight?.note}
+                      existingStyle={existingHighlight?.style}
                       onNote={(note) => highlightSelection(existingHighlight?.style ?? "yellow", note)}
                       onRead={() => {
                         speech.read(selectionMenu.text)
@@ -717,183 +790,205 @@ function ReaderChrome({
 
   return (
     <section className="reader-shell" aria-label={`PDF reader: ${source.fileName}`}>
-      <header className="pdf-toolbar">
-        <div className="toolbar-group toolbar-title">
-          <IconButton
-            label={railOpen ? "탐색 패널 닫기" : "탐색 패널 열기"}
-            onClick={() => setRailOpen((value) => !value)}
-          >
-            {railOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
-          </IconButton>
-          <div className="document-heading">
-            <strong>{source.fileName}</strong>
-            <span>
-              {source.sizeBytes < 1_000_000
-                ? `${Math.round(source.sizeBytes / 1000)} KB`
-                : `${(source.sizeBytes / 1_000_000).toFixed(1)} MB`}
-            </span>
+      {!chrome.focusMode && (
+        <header className="reader-titlebar">
+          <div className="titlebar-leading">
+            <IconButton
+              label={railOpen ? "탐색 패널 닫기" : "탐색 패널 열기"}
+              shortcut="⇧⌘T"
+              onClick={() => setRailOpen((value) => !value)}
+            >
+              {railOpen ? <PanelLeftClose size={17} /> : <PanelLeftOpen size={17} />}
+            </IconButton>
+            <IconButton label="학습 서재" shortcut="⌘L" onClick={chrome.onOpenLibrary}>
+              <LibraryBig size={17} />
+            </IconButton>
+            <span className="titlebar-divider" aria-hidden="true" />
+            <div className="document-heading">
+              <strong title={source.fileName}>{displayTitle(source.fileName)}</strong>
+              <span>
+                {chrome.documentType === "book" ? "책" : chrome.documentType === "article" ? "논문" : "PDF"}
+                {scrollState.totalPages ? ` · ${scrollState.totalPages}쪽` : ""} ·{" "}
+                {source.sizeBytes < 1_000_000
+                  ? `${Math.round(source.sizeBytes / 1000)} KB`
+                  : `${(source.sizeBytes / 1_000_000).toFixed(1)} MB`}
+              </span>
+            </div>
           </div>
-        </div>
 
-        <div className="toolbar-group page-controls">
-          <IconButton
-            label="이전 페이지"
-            onClick={() => navigatePage(-1)}
-            disabled={pageGroup.previous === null}
-          >
-            <ChevronLeft size={16} />
-          </IconButton>
-          <label className="page-input">
-            <span className="sr-only">현재 페이지</span>
-            <input
-              value={currentPage || 1}
-              inputMode="numeric"
-              onChange={(event) =>
-                scroll?.scrollToPage({
-                  pageNumber: clampPage(Number(event.target.value), scrollState.totalPages),
-                })
-              }
+          <div className="titlebar-trailing">
+            <IconButton
+              label="문서 검색"
+              shortcut="⌘F"
+              pressed={railOpen && railMode === "search"}
+              onClick={openSearch}
+            >
+              <Search size={17} />
+            </IconButton>
+            <IconButton
+              label={captureMode ? "캡처 취소" : "그림·표 캡처"}
+              pressed={captureMode}
+              onClick={() => setCaptureMode(!captureMode)}
+            >
+              <Camera size={17} />
+            </IconButton>
+            <IconButton
+              label="주석 목록"
+              pressed={railOpen && railMode === "highlights"}
+              onClick={() => {
+                setRailOpen(true)
+                setRailMode("highlights")
+              }}
+            >
+              <Highlighter size={17} />
+            </IconButton>
+            <span className="titlebar-divider" aria-hidden="true" />
+            <Button
+              className="ask-ai-button"
+              variant={chrome.aiOpen ? "secondary" : "primary"}
+              size="md"
+              label="Ask AI"
+              tooltip="AI 학습 공간 (⌘/)"
+              icon={<Sparkles size={15} aria-hidden="true" />}
+              aria-pressed={chrome.aiOpen}
+              onClick={chrome.onToggleAi}
             />
-            <span>/ {scrollState.totalPages || "—"}</span>
-          </label>
-          <IconButton label="다음 페이지" onClick={() => navigatePage(1)} disabled={pageGroup.next === null}>
-            <ChevronRight size={16} />
-          </IconButton>
-        </div>
-
-        <div className="toolbar-group toolbar-actions">
-          <IconButton
-            label={captureMode ? "캡처 취소" : "그림·표 캡처"}
-            onClick={() => setCaptureMode(!captureMode)}
-          >
-            <Camera size={16} />
-          </IconButton>
-          <IconButton
-            label={spreadMode === SpreadMode.None ? "두 페이지 보기" : "한 페이지 보기"}
-            onClick={toggleSpread}
-          >
-            <Columns2 size={16} />
-          </IconButton>
-          <IconButton label="축소" onClick={() => zoom?.zoomOut()}>
-            <Minus size={16} />
-          </IconButton>
-          <select
-            className="zoom-value"
-            aria-label="확대/축소 배율"
-            value={fitMode ?? String(zoomState.currentZoomLevel)}
-            onChange={(event) => {
-              const value = event.target.value
-              if (value === ZoomMode.FitPage || value === ZoomMode.FitWidth) setFitMode(value)
-              else {
-                setFitMode(null)
-                zoom?.requestZoom(Number(value))
-              }
-            }}
-          >
-            <option value={ZoomMode.FitPage}>
-              페이지 맞춤 (Fit Page)
-              {fitMode === "fit-page" ? ` · ${Math.round(zoomState.currentZoomLevel * 100)}%` : ""}
-            </option>
-            <option value={ZoomMode.FitWidth}>
-              너비 맞춤 (Fit Width)
-              {fitMode === "fit-width" ? ` · ${Math.round(zoomState.currentZoomLevel * 100)}%` : ""}
-            </option>
-            {!fitMode &&
-              ![0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 5].includes(zoomState.currentZoomLevel) && (
-                <option value={zoomState.currentZoomLevel}>
-                  {Math.round(zoomState.currentZoomLevel * 100)}%
-                </option>
+            <DropdownMenu
+              alignment="end"
+              menuWidth={248}
+              menuMaxHeight={520}
+              renderTrigger={(trigger) => (
+                <AxIconButton
+                  {...trigger}
+                  variant="ghost"
+                  label="문서 메뉴"
+                  tooltip="문서 메뉴"
+                  icon={<Ellipsis size={18} aria-hidden="true" />}
+                />
               )}
-            {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 5].map((level) => (
-              <option key={level} value={level}>
-                {level * 100}%
-              </option>
-            ))}
-          </select>
-          <IconButton label="확대" onClick={() => zoom?.zoomIn()}>
-            <ZoomIn size={16} />
-          </IconButton>
-          <IconButton label="시계 방향으로 회전" onClick={() => rotate?.rotateForward()}>
-            <RotateCw size={16} />
-          </IconButton>
-          <IconButton label="문서 검색" onClick={openSearch}>
-            <Search size={16} />
-          </IconButton>
-          <IconButton label="문서 닫기" onClick={onClose}>
-            <X size={16} />
-          </IconButton>
-        </div>
-      </header>
-
-      {returnPage !== null && (
-        <div className="reader-action-status evidence-navigation" role="status">
-          <span>근거 확인 · PDF p. {(evidence?.pageIndex ?? 0) + 1}</span>
-          <button
-            type="button"
-            onClick={() => {
-              scroll?.scrollToPage({ pageNumber: returnPage, behavior: "instant" })
-              setReturnPage(null)
-              setEvidence(null)
-            }}
-          >
-            <Undo2 size={13} /> 이전 읽던 페이지로
-          </button>
-          <button type="button" onClick={() => setEvidence(null)}>
-            강조 지우기
-          </button>
-        </div>
+            >
+              <DropdownMenuRadioGroup
+                label="문서 유형"
+                value={chrome.documentType === "unknown" ? undefined : chrome.documentType}
+                onChange={(value) => chrome.onDocumentTypeChange(value as "article" | "book")}
+              >
+                <DropdownMenuRadioItem value="article" label="논문" />
+                <DropdownMenuRadioItem value="book" label="책" />
+              </DropdownMenuRadioGroup>
+              <DropdownMenuDivider />
+              <DropdownMenuItem
+                label="시계 방향으로 회전"
+                icon={RotateCw}
+                onClick={() => rotate?.rotateForward()}
+              />
+              <DropdownMenuItem
+                label="집중 모드"
+                icon={Focus}
+                endContent={<Kbd keys="F" />}
+                onClick={chrome.onToggleFocus}
+              />
+              <DropdownMenuDivider />
+              <DropdownMenuItem label="학습 기록 내보내기" icon={Download} onClick={chrome.onExport} />
+              <DropdownMenuItem
+                label="설정"
+                icon={Settings2}
+                endContent={<Kbd keys="mod+," />}
+                onClick={chrome.onOpenSettings}
+              />
+              <DropdownMenuDivider />
+              <DropdownMenuItem label="문서 닫기" icon={X} onClick={onClose} />
+            </DropdownMenu>
+          </div>
+        </header>
       )}
 
-      {previousHighlights && (
-        <div className="reader-action-status" role="status">
-          하이라이트·주석 변경됨
-          <button
-            type="button"
-            onClick={() => {
-              setHighlights(previousHighlights)
-              onHighlightsChange(previousHighlights)
-              setPreviousHighlights(null)
-            }}
-          >
-            되돌리기
-          </button>
-        </div>
-      )}
-      {actionError && (
-        <div className="reader-action-status" role="alert">
-          {actionError}
-          <button type="button" onClick={() => setActionError(null)}>
-            닫기
-          </button>
-        </div>
-      )}
-      {speech.reading && (
-        <div className="reader-action-status" role="status">
-          선택한 구절 읽는 중
-          <button type="button" onClick={speech.stop}>
-            <Square size={12} /> 읽기 중지
-          </button>
+      {(returnPage !== null || previousHighlights || actionError || speech.reading) && (
+        <div className="reader-notices">
+          {returnPage !== null && (
+            <div className="reader-notice" role="status">
+              <span>근거 확인 · p. {(evidence?.pageIndex ?? 0) + 1}</span>
+              <Button
+                size="sm"
+                variant="ghost"
+                label="읽던 페이지로"
+                icon={<Undo2 size={13} />}
+                onClick={() => {
+                  scroll?.scrollToPage({ pageNumber: returnPage, behavior: "instant" })
+                  setReturnPage(null)
+                  setEvidence(null)
+                }}
+              />
+              <Button size="sm" variant="ghost" label="강조 지우기" onClick={() => setEvidence(null)} />
+            </div>
+          )}
+          {previousHighlights && (
+            <div className="reader-notice" role="status">
+              <span>하이라이트·주석을 바꿨습니다</span>
+              <Button
+                size="sm"
+                variant="ghost"
+                label="되돌리기"
+                icon={<Undo2 size={13} />}
+                onClick={() => {
+                  setHighlights(previousHighlights)
+                  onHighlightsChange(previousHighlights)
+                  setPreviousHighlights(null)
+                }}
+              />
+              <AxIconButton
+                size="sm"
+                variant="ghost"
+                label="알림 닫기"
+                icon={<X size={13} />}
+                onClick={() => setPreviousHighlights(null)}
+              />
+            </div>
+          )}
+          {actionError && (
+            <div className="reader-notice" data-tone="error" role="alert">
+              <span>{actionError}</span>
+              <AxIconButton
+                size="sm"
+                variant="ghost"
+                label="알림 닫기"
+                icon={<X size={13} />}
+                onClick={() => setActionError(null)}
+              />
+            </div>
+          )}
+          {speech.reading && (
+            <div className="reader-notice" role="status">
+              <span>선택한 구절 읽는 중</span>
+              <Button
+                size="sm"
+                variant="ghost"
+                label="읽기 중지"
+                icon={<Square size={12} />}
+                onClick={speech.stop}
+              />
+            </div>
+          )}
         </div>
       )}
       <div className="reader-content">
-        {railOpen && (
+        {railOpen && !chrome.focusMode && (
           <aside className="navigation-rail">
-            <div className="rail-tabs" role="tablist" aria-label="문서 탐색">
-              <button type="button" role="tab" aria-selected={railMode === "search"} onClick={openSearch}>
-                <Search size={14} /> 검색
-              </button>
-              <button type="button" role="tab" aria-selected={railMode === "outline"} onClick={closeSearch}>
-                <ListTree size={14} /> 목차
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={railMode === "highlights"}
-                onClick={() => setRailMode("highlights")}
-              >
-                <Highlighter size={14} /> 주석
-              </button>
-            </div>
+            <SegmentedControl
+              className="rail-tabs"
+              label="문서 탐색"
+              size="sm"
+              layout="fill"
+              value={railMode}
+              onChange={(value) => {
+                if (value === "search") openSearch()
+                else if (value === "outline") closeSearch()
+                else setRailMode("highlights")
+              }}
+            >
+              <SegmentedControlItem value="search" label="검색" icon={<Search size={13} />} />
+              <SegmentedControlItem value="outline" label="목차" icon={<ListTree size={13} />} />
+              <SegmentedControlItem value="highlights" label="주석" icon={<Highlighter size={13} />} />
+            </SegmentedControl>
             {railMode === "highlights" ? (
               <HighlightsPanel
                 highlights={highlights}
@@ -1013,6 +1108,154 @@ function ReaderChrome({
             onNavigatePage={navigatePage}
             renderPage={renderPage}
           />
+          <nav className="page-dock" aria-label="페이지와 확대/축소">
+            <DropdownMenu
+              placement="end"
+              alignment="end"
+              menuWidth={240}
+              menuMaxHeight={560}
+              renderTrigger={(trigger) => (
+                <AxIconButton
+                  {...trigger}
+                  className="dock-button"
+                  variant="ghost"
+                  size="sm"
+                  label="보기 옵션"
+                  tooltip="보기 옵션"
+                  icon={
+                    spreadMode === SpreadMode.None ? (
+                      <RectangleVertical size={16} aria-hidden="true" />
+                    ) : (
+                      <Columns2 size={16} aria-hidden="true" />
+                    )
+                  }
+                />
+              )}
+            >
+              <DropdownMenuRadioGroup
+                label="페이지 배치"
+                value={spreadMode === SpreadMode.None ? "single" : "spread"}
+                onChange={(value) => {
+                  if ((value === "single") !== (spreadMode === SpreadMode.None)) toggleSpread()
+                }}
+              >
+                <DropdownMenuRadioItem value="single" label="한 페이지 보기" />
+                <DropdownMenuRadioItem value="spread" label="두 페이지 보기" />
+              </DropdownMenuRadioGroup>
+              <DropdownMenuDivider />
+              <DropdownMenuRadioGroup
+                label="크기"
+                value={fitMode ?? (Math.abs(zoomState.currentZoomLevel - 1) < 0.001 ? "actual" : undefined)}
+                onChange={(value) => {
+                  if (value === "actual") {
+                    setFitMode(null)
+                    zoom?.requestZoom(1)
+                  } else setFitMode(value as FitMode)
+                }}
+              >
+                <DropdownMenuRadioItem value="actual" label="실제 크기" />
+                <DropdownMenuRadioItem value="fit-page" label="페이지 맞춤" />
+                <DropdownMenuRadioItem value="fit-width" label="너비 맞춤" />
+              </DropdownMenuRadioGroup>
+              <DropdownMenuDivider />
+              <DropdownMenuGroup>
+                <DropdownMenuItem
+                  label="시계 방향으로 회전"
+                  icon={RotateCw}
+                  hasCloseOnSelect={false}
+                  onClick={() => rotate?.rotateForward()}
+                />
+                <DropdownMenuCheckboxItem
+                  label="집중 모드"
+                  icon={Focus}
+                  value={chrome.focusMode}
+                  onChange={chrome.onToggleFocus}
+                />
+              </DropdownMenuGroup>
+            </DropdownMenu>
+            <span className="dock-rule" aria-hidden="true" />
+            <IconButton
+              label="확대"
+              shortcut="⌘="
+              size="sm"
+              className="dock-button"
+              onClick={() => zoom?.zoomIn()}
+            >
+              <Plus size={16} />
+            </IconButton>
+            <button
+              type="button"
+              className="dock-zoom"
+              title={fitMode === "fit-width" ? "너비 맞춤 · 눌러서 페이지 맞춤" : "눌러서 페이지 맞춤"}
+              aria-label={`확대/축소 ${Math.round(zoomState.currentZoomLevel * 100)}%, 페이지 맞춤으로 전환`}
+              onClick={() => setFitMode(fitMode === "fit-page" ? "fit-width" : "fit-page")}
+            >
+              {Math.round(zoomState.currentZoomLevel * 100)}%
+            </button>
+            <IconButton
+              label="축소"
+              shortcut="⌘−"
+              size="sm"
+              className="dock-button"
+              onClick={() => zoom?.zoomOut()}
+            >
+              <Minus size={16} />
+            </IconButton>
+            <span className="dock-rule" aria-hidden="true" />
+            <label className="dock-page">
+              <span className="sr-only">현재 페이지</span>
+              <input
+                value={pageDraft ?? String(currentPage || 1)}
+                inputMode="numeric"
+                aria-label={`현재 페이지, 전체 ${scrollState.totalPages}쪽`}
+                onFocus={(event) => event.currentTarget.select()}
+                onChange={(event) => setPageDraft(event.target.value.replace(/[^0-9]/g, ""))}
+                onBlur={() => setPageDraft(null)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault()
+                    if (pageDraft)
+                      scroll?.scrollToPage({
+                        pageNumber: clampPage(Number(pageDraft), scrollState.totalPages),
+                        behavior: "instant",
+                      })
+                    event.currentTarget.blur()
+                  }
+                  if (event.key === "Escape") event.currentTarget.blur()
+                }}
+              />
+              <span aria-hidden="true">{scrollState.totalPages || "—"}</span>
+            </label>
+            <IconButton
+              label="이전 페이지"
+              size="sm"
+              className="dock-button"
+              onClick={() => navigatePage(-1)}
+              disabled={pageGroup.previous === null}
+            >
+              <ChevronUp size={16} />
+            </IconButton>
+            <IconButton
+              label="다음 페이지"
+              size="sm"
+              className="dock-button"
+              onClick={() => navigatePage(1)}
+              disabled={pageGroup.next === null}
+            >
+              <ChevronDown size={16} />
+            </IconButton>
+          </nav>
+          {chrome.focusMode && (
+            <Button
+              className="focus-exit"
+              variant="secondary"
+              size="sm"
+              elevation="med"
+              label="집중 모드 종료"
+              endContent={<Kbd keys="F" />}
+              onClick={chrome.onToggleFocus}
+            />
+          )}
         </main>
       </div>
     </section>

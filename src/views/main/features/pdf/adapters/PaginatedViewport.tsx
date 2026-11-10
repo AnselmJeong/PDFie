@@ -237,7 +237,7 @@ export function PaginatedViewport({
   ])
 
   return (
-    <ViewportElementContext.Provider value={containerRef}>
+    <ViewportElementContext.Provider value={containerRef as React.RefObject<HTMLDivElement>}>
       <div ref={containerRef} className="pdf-viewport pdf-paginated-viewport" style={{ padding: gap }}>
         {!gated && item && (
           <div className="pdf-spread" style={{ width: contentWidth, height: item.height * scale }}>

@@ -1,32 +1,213 @@
+import { AlertDialog } from "@astryxdesign/core/AlertDialog"
+import { Badge } from "@astryxdesign/core/Badge"
+import { Button } from "@astryxdesign/core/Button"
+import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog"
+import { DropdownMenu, DropdownMenuItem } from "@astryxdesign/core/DropdownMenu"
+import { IconButton } from "@astryxdesign/core/IconButton"
+import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl"
+import { Selector } from "@astryxdesign/core/Selector"
+import { SideNav, SideNavItem, SideNavSection } from "@astryxdesign/core/SideNav"
+import { TextInput } from "@astryxdesign/core/TextInput"
+import { Token } from "@astryxdesign/core/Token"
 import {
   Archive,
   BookOpen,
-  Check,
-  Folder,
+  Ellipsis,
+  FolderClosed,
   FolderPlus,
+  GraduationCap,
+  Hash,
+  Inbox,
   LayoutGrid,
+  Library,
   List,
   Pencil,
-  Search,
+  Sparkles,
   Star,
   Tags,
   Trash2,
-  X,
 } from "lucide-react"
-import { useRef, useState } from "react"
-import type { LibraryFacets, LibraryPage, LibraryQuery } from "../../../../shared/study/library"
+import { type ReactNode, useRef, useState } from "react"
+import type {
+  LibraryDocument,
+  LibraryFacets,
+  LibraryPage,
+  LibraryQuery,
+} from "../../../../shared/study/library"
 
 export const EMPTY_FACETS: LibraryFacets = { total: 0, unassigned: 0, topics: [], collections: [] }
 const FILTERS = [
-  ["all", "전체 자료", BookOpen],
-  ["lessons", "수업 있는 자료", Check],
+  ["all", "전체 자료", Library],
+  ["lessons", "수업 있는 자료", GraduationCap],
   ["favorites", "즐겨찾기", Star],
   ["archived", "보관함", Archive],
 ] as const
+const SORTS = [
+  { value: "recent", label: "최근 학습순" },
+  { value: "added", label: "최근 추가순" },
+  { value: "title", label: "제목순" },
+] as const
+const TOPIC_TONES = ["blue", "green", "purple", "orange", "teal", "pink", "cyan", "yellow"] as const
 const date = (value: string) =>
   Date.parse(value) > 0
     ? new Date(value).toLocaleDateString("ko-KR", { year: "numeric", month: "numeric", day: "numeric" })
     : "이전 기록"
+
+/** A stable hue per topic name, so the same topic reads the same everywhere. */
+export function topicTone(name: string) {
+  let hash = 0
+  for (const character of name) hash = (hash * 31 + character.charCodeAt(0)) >>> 0
+  return TOPIC_TONES[hash % TOPIC_TONES.length]!
+}
+
+function TopicBadge({ item }: { item: LibraryDocument }) {
+  const pending = item.classification?.state === "running" || item.classification?.state === "queued"
+  if (!item.topic)
+    return (
+      <Badge
+        variant="neutral"
+        label={pending ? "AI 분류 중" : "미분류"}
+        icon={pending ? <Sparkles size={11} /> : undefined}
+      />
+    )
+  return <Badge variant={topicTone(item.topic)} label={item.topic} />
+}
+
+function SourceStatus({ item, currentHash }: { item: LibraryDocument; currentHash?: string }) {
+  const state = item.documentHash === currentHash ? "reading" : item.sourceAvailable ? "linked" : "missing"
+  return (
+    <span className="paper-source" data-source={state}>
+      {state === "reading" ? "읽는 중" : state === "linked" ? "PDF 연결됨" : "원문 없이 복습"}
+    </span>
+  )
+}
+
+function PaperCard({
+  item,
+  currentHash,
+  onSelect,
+}: {
+  item: LibraryDocument
+  currentHash?: string
+  onSelect: (hash: string) => void
+}) {
+  const checked = item.goalCount ? item.checkedGoalCount / item.goalCount : 0
+  return (
+    <button className="paper-card" type="button" onClick={() => onSelect(item.documentHash)}>
+      <span className="paper-card-top">
+        <TopicBadge item={item} />
+        {item.favorite && (
+          <Star className="paper-favorite" size={14} fill="currentColor" aria-label="즐겨찾기" />
+        )}
+      </span>
+      <span className="paper-title">{item.title}</span>
+      <span className="paper-collections">
+        {item.collections.length ? item.collections.map((c) => c.name).join(" · ") : " "}
+      </span>
+      <span className="paper-progress" title={`이해 점검 ${item.checkedGoalCount}/${item.goalCount}`}>
+        <span className="paper-progress-track">
+          <i style={{ width: `${Math.round(checked * 100)}%` }} />
+        </span>
+        <span>
+          점검 {item.checkedGoalCount}/{item.goalCount}
+        </span>
+      </span>
+      <span className="paper-stats">
+        <span>수업 {item.lessonCount}</span>
+        <span>목표 {item.goalCount}</span>
+        <span>설명 {item.messageCount}</span>
+      </span>
+      <span className="paper-meta">
+        <time>{date(item.updatedAt)}</time>
+        <SourceStatus item={item} currentHash={currentHash} />
+      </span>
+    </button>
+  )
+}
+
+function PaperRow({
+  item,
+  currentHash,
+  onSelect,
+}: {
+  item: LibraryDocument
+  currentHash?: string
+  onSelect: (hash: string) => void
+}) {
+  return (
+    <button className="paper-row" type="button" onClick={() => onSelect(item.documentHash)}>
+      <span className="paper-row-title">
+        {item.favorite ? (
+          <Star className="paper-favorite" size={14} fill="currentColor" aria-label="즐겨찾기" />
+        ) : (
+          <BookOpen size={14} aria-hidden="true" />
+        )}
+        <span>{item.title}</span>
+      </span>
+      <span className="paper-row-topic">
+        <TopicBadge item={item} />
+      </span>
+      <span className="paper-stats">
+        <span>수업 {item.lessonCount}</span>
+        <span>
+          점검 {item.checkedGoalCount}/{item.goalCount}
+        </span>
+      </span>
+      <time>{date(item.updatedAt)}</time>
+      <SourceStatus item={item} currentHash={currentHash} />
+    </button>
+  )
+}
+
+function CollectionDialog({
+  edit,
+  onClose,
+  onSave,
+}: {
+  edit: { id?: string; name: string } | null
+  onClose: () => void
+  onSave: (name: string, id?: string) => Promise<boolean>
+}) {
+  const [name, setName] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [lastEdit, setLastEdit] = useState(edit)
+  if (edit !== lastEdit) {
+    setLastEdit(edit)
+    setName(edit?.name ?? "")
+  }
+  const save = async () => {
+    if (!edit || saving || !name.trim()) return
+    setSaving(true)
+    try {
+      if (await onSave(name.trim(), edit.id)) onClose()
+    } finally {
+      setSaving(false)
+    }
+  }
+  return (
+    <Dialog isOpen={!!edit} onOpenChange={(open) => !open && onClose()} width={400} purpose="form">
+      <DialogHeader
+        title={edit?.id ? "컬렉션 이름 바꾸기" : "새 컬렉션"}
+        subtitle={edit?.id ? undefined : "연구 주제나 프로젝트별로 논문을 모아 두세요."}
+        onOpenChange={(open) => !open && onClose()}
+      />
+      <div className="dialog-body">
+        <TextInput label="컬렉션 이름" value={name} onChange={setName} onEnter={() => void save()} />
+      </div>
+      <footer className="dialog-footer">
+        <span className="dialog-footer-spacer" />
+        <Button variant="secondary" label="취소" onClick={onClose} />
+        <Button
+          variant="primary"
+          label="저장"
+          isDisabled={!name.trim()}
+          isLoading={saving}
+          onClick={() => void save()}
+        />
+      </footer>
+    </Dialog>
+  )
+}
 
 export function LibraryCatalog({
   page,
@@ -39,8 +220,9 @@ export function LibraryCatalog({
   currentHash,
   onCollectionSave,
   onCollectionDelete,
-  onOpenPdf,
-  opening,
+  onManageTopics,
+  banner,
+  emptyAction,
 }: {
   page: LibraryPage
   facets: LibraryFacets
@@ -52,8 +234,9 @@ export function LibraryCatalog({
   currentHash?: string
   onCollectionSave: (name: string, id?: string) => Promise<boolean>
   onCollectionDelete: (id: string) => Promise<boolean>
-  onOpenPdf: () => void
-  opening: boolean
+  onManageTopics: () => void
+  banner?: ReactNode
+  emptyAction: ReactNode
 }) {
   const [view, setView] = useState<"cards" | "list">(() => {
     try {
@@ -63,348 +246,258 @@ export function LibraryCatalog({
     }
   })
   const [edit, setEdit] = useState<{ id?: string; name: string } | null>(null)
-  const [deleting, setDeleting] = useState(false)
-  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null)
+  const [removing, setRemoving] = useState(false)
   const results = useRef<HTMLDivElement>(null)
   const collection = facets.collections.find((item) => item.id === query.collectionId)
-  const filterName = FILTERS.find(([id]) => id === (query.filter ?? "all"))?.[1] ?? "전체 자료"
+  const filter = query.filter ?? "all"
+  const filterName = FILTERS.find(([id]) => id === filter)?.[1] ?? "전체 자료"
   const heading = collection?.name ?? (query.topic === "" ? "미분류" : query.topic) ?? filterName
   const change = (patch: Partial<LibraryQuery>) => {
     onQuery(patch)
     results.current?.scrollTo(0, 0)
   }
   const hasFilter = Boolean(
-    query.query || query.topic !== undefined || query.collectionId || query.filter !== "all",
+    query.query || query.topic !== undefined || query.collectionId || filter !== "all",
   )
   const clear = () => change({ query: "", topic: undefined, collectionId: undefined, filter: "all" })
-  const save = async () => {
-    if (!edit || saving) return
-    setSaving(true)
-    try {
-      if (await onCollectionSave(edit.name, edit.id)) setEdit(null)
-    } finally {
-      setSaving(false)
-    }
-  }
 
   return (
     <div className="library-browser">
-      <aside className="library-navigation" aria-label="서재 탐색">
-        <nav className="library-nav-group" aria-label="자료 종류">
+      <SideNav
+        className="library-sidenav"
+        aria-label="서재 탐색"
+        footer={<p className="library-local-note">학습 기록은 이 Mac에만 저장됩니다.</p>}
+      >
+        <SideNavSection title="서재" isHeaderHidden>
           {FILTERS.map(([id, label, Icon]) => (
-            <button
-              type="button"
+            <SideNavItem
               key={id}
-              aria-pressed={(query.filter ?? "all") === id}
-              onClick={() => {
-                change({ filter: id })
-                setDeleting(false)
-              }}
-            >
-              <Icon size={16} />
-              <span>{label}</span>
-            </button>
+              label={label}
+              icon={Icon}
+              size="sm"
+              isSelected={filter === id}
+              endContent={id === "all" ? <small>{facets.total}</small> : undefined}
+              onClick={() => change({ filter: id })}
+            />
           ))}
-        </nav>
-        <nav className="library-nav-group" aria-label="주제">
-          <div className="library-nav-heading">
-            <Tags size={13} />
-            <span>주제</span>
-          </div>
-          <button
-            type="button"
-            aria-pressed={query.topic === undefined}
-            onClick={() => change({ topic: undefined })}
-          >
-            <span>모든 주제</span>
-            <small>{facets.total}</small>
-          </button>
-          <button type="button" aria-pressed={query.topic === ""} onClick={() => change({ topic: "" })}>
-            <span>미분류</span>
-            <small>{facets.unassigned}</small>
-          </button>
+        </SideNavSection>
+        <SideNavSection
+          title="주제"
+          endContent={
+            <IconButton
+              variant="ghost"
+              size="sm"
+              label="주제 정리"
+              tooltip="주제 이름 변경·합치기"
+              icon={<Tags size={14} />}
+              isDisabled={!facets.topics.length}
+              onClick={onManageTopics}
+            />
+          }
+        >
           {facets.topics.map((topic) => (
-            <button
-              type="button"
+            <SideNavItem
               key={topic.name}
-              aria-pressed={query.topic === topic.name}
-              onClick={() => change({ topic: topic.name })}
-            >
-              <span>{topic.name}</span>
-              <small>{topic.count}</small>
-            </button>
+              label={topic.name}
+              icon={Hash}
+              size="sm"
+              isSelected={query.topic === topic.name}
+              endContent={<small>{topic.count}</small>}
+              onClick={() => change({ topic: query.topic === topic.name ? undefined : topic.name })}
+            />
           ))}
-        </nav>
-        <nav className="library-nav-group" aria-label="컬렉션">
-          <div className="library-nav-heading">
-            <Folder size={13} />
-            <span>컬렉션</span>
-            <button
-              type="button"
-              aria-label="컬렉션 만들기"
-              onClick={() => {
-                setEdit({ name: "" })
-                setDeleting(false)
-              }}
-            >
-              <FolderPlus size={15} />
-            </button>
-          </div>
-          <button
-            type="button"
-            aria-pressed={!query.collectionId}
-            onClick={() => change({ collectionId: undefined })}
-          >
-            <span>모든 컬렉션</span>
-          </button>
+          <SideNavItem
+            label="미분류"
+            icon={Inbox}
+            size="sm"
+            isSelected={query.topic === ""}
+            endContent={<small>{facets.unassigned}</small>}
+            onClick={() => change({ topic: query.topic === "" ? undefined : "" })}
+          />
+        </SideNavSection>
+        <SideNavSection
+          title="컬렉션"
+          endContent={
+            <IconButton
+              variant="ghost"
+              size="sm"
+              label="컬렉션 만들기"
+              tooltip="컬렉션 만들기"
+              icon={<FolderPlus size={14} />}
+              onClick={() => setEdit({ name: "" })}
+            />
+          }
+        >
           {facets.collections.map((item) => (
-            <button
-              type="button"
+            <SideNavItem
               key={item.id}
-              aria-pressed={query.collectionId === item.id}
-              onClick={() => {
-                change({ collectionId: item.id })
-                setDeleting(false)
-              }}
-            >
-              <span>{item.name}</span>
-              <small>{item.count}</small>
-            </button>
+              label={item.name}
+              icon={FolderClosed}
+              size="sm"
+              isSelected={query.collectionId === item.id}
+              endContent={<small>{item.count}</small>}
+              onClick={() => change({ collectionId: query.collectionId === item.id ? undefined : item.id })}
+              actions={
+                <DropdownMenu
+                  alignment="end"
+                  menuWidth={180}
+                  renderTrigger={(trigger) => (
+                    <IconButton
+                      {...trigger}
+                      variant="ghost"
+                      size="sm"
+                      label={`${item.name} 컬렉션 메뉴`}
+                      icon={<Ellipsis size={14} />}
+                    />
+                  )}
+                >
+                  <DropdownMenuItem
+                    label="이름 바꾸기"
+                    icon={Pencil}
+                    onClick={() => setEdit({ id: item.id, name: item.name })}
+                  />
+                  <DropdownMenuItem
+                    label="컬렉션 삭제"
+                    icon={Trash2}
+                    variant="destructive"
+                    onClick={() => setDeleting({ id: item.id, name: item.name })}
+                  />
+                </DropdownMenu>
+              }
+            />
           ))}
           {!facets.collections.length && (
-            <p className="library-nav-hint">
-              연구 주제나 프로젝트별로
-              <br />
-              논문을 모아 두세요.
-            </p>
+            <p className="library-nav-hint">연구 주제나 프로젝트별로 논문을 모아 두세요.</p>
           )}
-          {edit && (
-            <form
-              className="library-collection-form"
-              onSubmit={(event) => {
-                event.preventDefault()
-                void save()
-              }}
-            >
-              <label htmlFor="collection-name">{edit.id ? "컬렉션 이름 바꾸기" : "새 컬렉션"}</label>
-              <input
-                id="collection-name"
-                maxLength={80}
-                value={edit.name}
-                onChange={(event) => setEdit({ ...edit, name: event.target.value })}
-              />
-              <div>
-                <button type="submit" disabled={saving || !edit.name.trim()}>
-                  {saving ? "저장 중…" : "저장"}
-                </button>
-                <button type="button" disabled={saving} onClick={() => setEdit(null)}>
-                  취소
-                </button>
-              </div>
-            </form>
-          )}
-        </nav>
-        <p className="library-local-note">학습 기록은 이 Mac에 저장됩니다.</p>
-      </aside>
-      <section className="library-discovery" aria-label="서재 자료">
-        <header className="library-discovery-heading">
+        </SideNavSection>
+      </SideNav>
+
+      <section className="library-discovery" aria-label="서재 자료" ref={results}>
+        {banner}
+        <header className="library-heading">
           <div>
-            <p className="library-overline">나의 연구와 배움</p>
             <h1>{heading}</h1>
-            <p>논문을 찾아 읽고, 쌓아 둔 학습을 이어 가세요.</p>
+            <p role="status">{loading && !page.items.length ? "자료 확인 중…" : `${page.total}개 자료`}</p>
           </div>
-          {collection && (
-            <div className="library-collection-actions">
-              <button
-                type="button"
-                aria-label="컬렉션 이름 바꾸기"
-                onClick={() => {
-                  setEdit({ id: collection.id, name: collection.name })
-                  setDeleting(false)
-                }}
-              >
-                <Pencil size={15} />
-              </button>
-              <button type="button" aria-label="컬렉션 삭제" onClick={() => setDeleting(true)}>
-                <Trash2 size={15} />
-              </button>
-            </div>
-          )}
-        </header>
-        {deleting && collection && (
-          <div className="library-collection-confirm">
-            <p>‘{collection.name}’ 컬렉션을 삭제할까요? 논문과 학습 기록은 유지됩니다.</p>
-            <button
-              type="button"
-              disabled={saving}
-              onClick={async () => {
-                setSaving(true)
+          <div className="library-heading-tools">
+            <Selector
+              label="정렬"
+              isLabelHidden
+              size="sm"
+              variant="ghost"
+              value={query.sort ?? "recent"}
+              options={SORTS.map((sort) => ({ ...sort }))}
+              onChange={(value) => {
+                if (value === "recent" || value === "title" || value === "added") change({ sort: value })
+              }}
+            />
+            <SegmentedControl
+              label="보기 방식"
+              size="sm"
+              value={view}
+              onChange={(value) => {
+                const next = value === "list" ? "list" : "cards"
+                setView(next)
                 try {
-                  if (await onCollectionDelete(collection.id)) {
-                    setDeleting(false)
-                    change({ collectionId: undefined })
-                  }
-                } finally {
-                  setSaving(false)
+                  localStorage.setItem("pdfie:library-view", next)
+                } catch {
+                  /* The view still works without storage. */
                 }
               }}
             >
-              컬렉션 삭제
-            </button>
-            <button type="button" disabled={saving} onClick={() => setDeleting(false)}>
-              취소
-            </button>
+              <SegmentedControlItem
+                value="cards"
+                label="카드 보기"
+                isLabelHidden
+                icon={<LayoutGrid size={14} />}
+              />
+              <SegmentedControlItem value="list" label="목록 보기" isLabelHidden icon={<List size={14} />} />
+            </SegmentedControl>
+          </div>
+        </header>
+        {hasFilter && (
+          <div className="library-active-filters">
+            {query.query && (
+              <Token size="sm" label={`검색: ${query.query}`} onRemove={() => change({ query: "" })} />
+            )}
+            {filter !== "all" && (
+              <Token size="sm" label={filterName} onRemove={() => change({ filter: "all" })} />
+            )}
+            {query.topic !== undefined && (
+              <Token
+                size="sm"
+                label={`주제: ${query.topic || "미분류"}`}
+                onRemove={() => change({ topic: undefined })}
+              />
+            )}
+            {collection && (
+              <Token
+                size="sm"
+                label={`컬렉션: ${collection.name}`}
+                onRemove={() => change({ collectionId: undefined })}
+              />
+            )}
+            <Button variant="ghost" size="sm" label="필터 초기화" onClick={clear} />
           </div>
         )}
-        <div className="library-discovery-toolbar">
-          <div className="library-search">
-            <Search size={17} />
-            <input
-              aria-label="서재 검색"
-              placeholder="제목, 주제, 학습 내용 검색"
-              value={query.query ?? ""}
-              onChange={(event) => change({ query: event.target.value })}
+        <div className={`library-results is-${view}`} aria-busy={loading}>
+          {page.items.map((item) =>
+            view === "cards" ? (
+              <PaperCard key={item.documentHash} item={item} currentHash={currentHash} onSelect={onSelect} />
+            ) : (
+              <PaperRow key={item.documentHash} item={item} currentHash={currentHash} onSelect={onSelect} />
+            ),
+          )}
+        </div>
+        {!loading && !page.items.length && (
+          <div className="library-browser-empty">
+            <span className="library-empty-mark">
+              <BookOpen size={22} strokeWidth={1.5} />
+            </span>
+            <h2>{hasFilter ? "조건에 맞는 자료가 없습니다" : "첫 논문부터, 나의 서재로"}</h2>
+            <p>
+              {hasFilter
+                ? "검색어나 분류를 바꿔 보세요. 컬렉션에는 논문의 ‘분류’에서 자료를 추가할 수 있습니다."
+                : "PDF를 열거나 폴더를 가져오면 이곳에 모입니다. 논문별 수업, 목표와 설명도 함께 보관됩니다."}
+            </p>
+            {hasFilter ? <Button variant="secondary" label="전체 자료 보기" onClick={clear} /> : emptyAction}
+          </div>
+        )}
+        {page.items.length < page.total && (
+          <div className="library-load-more">
+            <Button
+              variant="secondary"
+              label={`더 보기 · ${page.items.length}/${page.total}`}
+              isLoading={loading}
+              onClick={onMore}
             />
-            {query.query && (
-              <button type="button" aria-label="검색 지우기" onClick={() => change({ query: "" })}>
-                <X size={14} />
-              </button>
-            )}
           </div>
-          <select
-            aria-label="자료 정렬"
-            value={query.sort ?? "recent"}
-            onChange={(event) => {
-              const value = event.target.value
-              if (value === "recent" || value === "title" || value === "added") change({ sort: value })
-            }}
-          >
-            <option value="recent">최근 학습순</option>
-            <option value="added">최근 추가순</option>
-            <option value="title">제목순</option>
-          </select>
-          <fieldset className="library-view-switch" aria-label="보기 방식">
-            {(
-              [
-                ["cards", "카드 보기", LayoutGrid],
-                ["list", "목록 보기", List],
-              ] as const
-            ).map(([id, label, Icon]) => (
-              <button
-                type="button"
-                key={id}
-                aria-label={label}
-                aria-pressed={view === id}
-                onClick={() => {
-                  setView(id)
-                  try {
-                    localStorage.setItem("pdfie:library-view", id)
-                  } catch {
-                    /* View still works without storage. */
-                  }
-                }}
-              >
-                <Icon size={17} />
-              </button>
-            ))}
-          </fieldset>
-        </div>
-        <div className="library-results-heading">
-          <span role="status">{loading ? "자료 확인 중…" : `${page.total}개 자료`}</span>
-          {hasFilter && (
-            <button type="button" onClick={clear}>
-              필터 초기화 <X size={12} />
-            </button>
-          )}
-          {query.topic !== undefined && (
-            <span className="library-active-scope">주제: {query.topic || "미분류"}</span>
-          )}
-          {collection && <span className="library-active-scope">컬렉션: {collection.name}</span>}
-        </div>
-        <div className="library-results" ref={results} aria-busy={loading}>
-          <div className={`library-paper-${view}`}>
-            {page.items.map((item) => (
-              <button
-                className="library-paper"
-                type="button"
-                key={item.documentHash}
-                onClick={() => onSelect(item.documentHash)}
-              >
-                <span className="library-paper-top">
-                  <span>
-                    {item.topic ||
-                      (item.classification?.state === "running" || item.classification?.state === "queued"
-                        ? "AI 분류 중…"
-                        : "미분류")}
-                  </span>
-                  {item.favorite ? (
-                    <Star size={15} fill="currentColor" aria-label="즐겨찾기" />
-                  ) : (
-                    <BookOpen size={17} />
-                  )}
-                </span>
-                <span className="library-paper-title">{item.title}</span>
-                <span className="library-paper-collections">
-                  {item.collections.map((c) => c.name).join(" · ") || "컬렉션 미지정"}
-                </span>
-                <span className="library-paper-counts">
-                  수업 {item.lessonCount} <span>목표 {item.goalCount}</span>{" "}
-                  <span>설명 {item.messageCount}</span>
-                </span>
-                {item.lessonCount > 0 && (
-                  <span className="library-paper-progress">
-                    마친 수업 {item.completedLessonCount}/{item.lessonCount} · 이해 점검{" "}
-                    {item.checkedGoalCount}/{item.goalCount}
-                  </span>
-                )}
-                <span className="library-paper-meta">
-                  <time>{date(item.updatedAt)}</time>
-                  <span
-                    data-source={
-                      item.documentHash === currentHash
-                        ? "reading"
-                        : item.sourceAvailable
-                          ? "linked"
-                          : "missing"
-                    }
-                  >
-                    {item.documentHash === currentHash
-                      ? "읽는 중"
-                      : item.sourceAvailable
-                        ? "PDF 연결됨"
-                        : "원문 없이 복습 가능"}
-                  </span>
-                </span>
-              </button>
-            ))}
-          </div>
-          {!loading && !page.items.length && (
-            <div className="library-browser-empty">
-              <BookOpen size={32} strokeWidth={1.25} />
-              <h2>{hasFilter ? "조건에 맞는 자료가 없습니다" : "첫 논문부터, 나의 서재로"}</h2>
-              <p>
-                {hasFilter
-                  ? "검색어나 분류를 바꿔 보세요. 컬렉션에는 논문의 ‘분류’에서 자료를 추가할 수 있습니다."
-                  : "PDF를 열면 이곳에 모입니다. 논문별 수업, 목표와 설명도 함께 보관됩니다."}
-              </p>
-              {hasFilter ? (
-                <button type="button" onClick={clear}>
-                  전체 자료 보기
-                </button>
-              ) : (
-                <button type="button" className="library-primary" disabled={opening} onClick={onOpenPdf}>
-                  PDF 열기
-                </button>
-              )}
-            </div>
-          )}
-          {page.items.length < page.total && (
-            <button className="library-load-more" type="button" disabled={loading} onClick={onMore}>
-              {loading ? "불러오는 중…" : `더 보기 · ${page.items.length}/${page.total}`}
-            </button>
-          )}
-        </div>
+        )}
       </section>
+
+      <CollectionDialog edit={edit} onClose={() => setEdit(null)} onSave={onCollectionSave} />
+      <AlertDialog
+        isOpen={!!deleting}
+        onOpenChange={(open) => !open && setDeleting(null)}
+        title={`‘${deleting?.name ?? ""}’ 컬렉션을 삭제할까요?`}
+        description="컬렉션만 사라집니다. 논문과 학습 기록은 그대로 유지됩니다."
+        actionLabel="컬렉션 삭제"
+        cancelLabel="취소"
+        isActionLoading={removing}
+        onAction={async () => {
+          if (!deleting) return
+          setRemoving(true)
+          try {
+            if (await onCollectionDelete(deleting.id)) {
+              if (query.collectionId === deleting.id) change({ collectionId: undefined })
+              setDeleting(null)
+            }
+          } finally {
+            setRemoving(false)
+          }
+        }}
+      />
     </div>
   )
 }

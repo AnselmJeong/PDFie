@@ -117,6 +117,7 @@ export function useAiConnection() {
       selectedModel?: string
       sidebarWidth?: number
       sidebarFontSize?: number
+      appearance?: AiSettingsStatus["appearance"]
       apiKey?: string
       clearApiKey?: boolean
     }) => {

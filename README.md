@@ -6,6 +6,7 @@ PDFie is a native-WebKit macOS reader and study workspace for academic papers an
 
 - macOS 14 or newer
 - Bun
+- Current Safari/WebKit updates (Astryx menus and tooltips use CSS anchor positioning)
 
 ## Run and verify
 
@@ -37,11 +38,13 @@ The download icon exports goals, conversations, citations, complete lesson steps
 
 ## Study library
 
-The app opens to **학습 서재**. Use **⌘L**, the sidebar's book icon or the reader's **학습 서재** button to return to it. The current PDF stays open while browsing the library.
+The app opens to **학습 서재**. Use **⌘L** or the library icon in the reader's title bar to return to it; **읽던 PDF** in the library's title bar goes back. The current PDF stays open while browsing the library.
+
+The library's title bar holds search and an **추가** menu (PDF 열기, PDF 여러 개 가져오기, 폴더 가져오기). The sidebar filters by kind (전체 자료, 수업 있는 자료, 즐겨찾기, 보관함), topic and collection; these combine and appear as removable chips above the results. Cards lead with the topic, title, collections and the share of passed checks.
 
 - Browse a full-width card catalog or switch to a compact list. The view preference is remembered on this device. Select a paper to enter its study workspace; returning to the catalog retains the current search, filters and scroll position.
-- Use **PDF 여러 개** or **폴더 추가** to import several PDFs or scan a folder and its subfolders. Files are deduplicated by byte hash, indexed in a separate process and classified through the existing AI connection. The queue survives restarting the app; stopping keeps completed imports. The result panel separates added, duplicate and failed files from classification progress. Original PDFs remain at their current paths; the library does not make managed copies.
-- New papers reuse existing topic names where appropriate; they may introduce a new topic when none fits. Existing assignments are never silently reclustered. **주제 정리** previews a rename or merge, including archived and manually assigned papers, before applying it. Old names become aliases of the new name so later classifications cannot recreate retired labels. **방금 변경 되돌리기** restores the previous assignment only while no later classification or topic edit would be overwritten. Individual assignments remain editable in **분류**.
+- Use **추가 → PDF 여러 개 가져오기** or **폴더 가져오기** to import several PDFs or scan a folder and its subfolders. Files are deduplicated by byte hash, indexed in a separate process and classified through the existing AI connection. The queue survives restarting the app; stopping keeps completed imports. A banner above the catalog shows progress, separates added, duplicate and failed files from classification progress, and expands to list skipped items. Original PDFs remain at their current paths; the library does not make managed copies.
+- New papers reuse existing topic names where appropriate; they may introduce a new topic when none fits. Existing assignments are never silently reclustered. **주제 정리** (the tag button beside the sidebar's 주제 heading) previews a rename or merge, including archived and manually assigned papers, before applying it. Old names become aliases of the new name so later classifications cannot recreate retired labels. **방금 변경 되돌리기** restores the previous assignment only while no later classification or topic edit would be overwritten. Individual assignments remain editable in **분류**.
 - Search paper titles, topics, collection names and saved goals, lessons and explanations; sort by recent study, recent addition or title. Favorites, archive, topic and collection filters can be combined. Results load from SQLite in batches of 40.
 - Create, rename and remove collections in the catalog. In a paper’s **분류** panel, assign a custom topic and any number of collections (up to 100). New papers and existing unclassified papers are categorized automatically from saved body excerpts using the currently selected AI connection/model. The panel shows the rationale and sampled pages; edit and save the topic to protect it from automatic replacement, or explicitly choose **AI로 주제 다시 지정**. Missing text or connection failures remain reviewable and can be retried. Classification pauses for foreground learning requests. Removing a collection removes only its memberships, preserving every paper and study record.
 - Select a paper to reopen **Interactive learning**, study goals, summaries and conversations. Review, slider experiments, quiz attempts, feedback and saved progress work without the original PDF or an AI connection. Finishing a lesson and independently passing a quiz are tracked separately.
@@ -54,7 +57,7 @@ Batch import skips hidden entries and symbolic links, and accepts up to 10,000 P
 
 ## AI connections and storage
 
-Open the separate **설정** window with the settings icon or **⌘,**. AI connection, model and appearance are organized there.
+Open the separate **설정** window with the settings icon or **⌘,**. Its **AI 연결** page chooses the service (ChatGPT 구독 or Ollama Cloud), shows sign-in state and usage limits or the API key, and selects the model. **화면** sets the appearance (시스템 설정, 라이트, 다크 — applied to every window) and the study panel's reading size and width.
 
 **Ollama Cloud** uses the existing fixed endpoint `https://ollama.com/v1`. Configure its API key in AI settings or the Bun process's `OLLAMA_API_KEY` environment. Keys entered in settings use the existing local AES-GCM secret file; this is not macOS Keychain storage. Old settings are backed up before their first study-settings migration. Model choices are remembered separately per provider.
 
@@ -66,16 +69,26 @@ Context is bounded and lexical, with a limited Korean–English term expansion. 
 
 OpenIntelligentUI integration ports its MIT-licensed design system and CSS → HTML → JavaScript rendering contract at upstream revision `f6e4388b26a64b9a0714943b08a1ce622b924eec`. PDFie uses its own Codex/Ollama provider and durable study store. Custom screens render after generation and validation, inside an opaque-origin iframe hosted by a separate RPC-disabled native webview. Network requests and external navigation are blocked; the host accepts only bounded control state, resizing and allowlisted source evidence. It does not install the upstream Next.js/Python server or require a separate Jev/API-key connection. See [ADR 007](docs/decisions/007-openintelligentui.md) for the integration boundary and limitations.
 
+## Reader
+
+The title bar holds navigation, the document title, search, capture, annotations,
+**Ask AI** (toggles the study panel, **⌘/**) and a **⋯** menu for document type,
+rotation, focus mode, export, settings and closing the document. A floating page
+dock on the canvas controls the view (one/two pages, actual size, fit page/width),
+zoom and page position. **F** toggles focus mode, which hides everything but the
+page and the dock.
+
 ## Selected-text actions
 
-Select a passage to Ask AI, Summarize, Copy, Read with system voices, add a note,
-or apply yellow/green/blue/pink highlighting or a red underline. `H` highlights
-and `U` underlines the current selection; `Escape` dismisses selection or stops
-reading. AI keeps the selected quote when the composer receives focus, and
-retains a summary draft if the model is not ready.
+Select a passage to open the selection card: highlight (`H`), underline (`U`),
+note, copy, five colors, and actions — AI에게 묻기, 요약하기, 쉽게 풀어 설명,
+용어·개념 정의 and 소리 내어 읽기. `Escape` dismisses selection or stops reading.
+AI keeps the selected quote when the composer receives focus, and retains a
+summary draft if the model is not ready. Answers cite pages inline, at the end of
+the sentence they support.
 
-The **주석** navigation tab lists saved passages, lets you change colors/edit notes,
-and jumps back to their pages. Annotation changes can be undone. Highlights and
+The **주석** navigation tab lists saved passages as cards tinted by their color;
+change the color with the swatches, edit the note inline, or jump back to the page. Annotation changes can be undone. Highlights and
 notes persist per document without modifying the original PDF.
 
 ## Architecture records
@@ -86,5 +99,6 @@ notes persist per document without modifying the original PDF.
 - `docs/decisions/003-evidence-model.md`
 - `docs/decisions/004-provider-auth.md`
 - `docs/decisions/005-lesson-runtime.md`
+- `docs/decisions/008-astryx-design-system.md`
 - `docs/qa/phase-0-results.md`
 - `docs/qa/research-platform-spike.md`

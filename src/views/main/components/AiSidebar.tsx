@@ -1,4 +1,21 @@
-import { BookOpen, Copy, Download, PanelRightClose, Send, Settings2, Sparkles, Square } from "lucide-react"
+import { Button } from "@astryxdesign/core/Button"
+import { IconButton } from "@astryxdesign/core/IconButton"
+import { Tab, TabList } from "@astryxdesign/core/TabList"
+import {
+  AArrowDown,
+  AArrowUp,
+  ArrowLeft,
+  ArrowUp,
+  Camera,
+  Copy,
+  FlaskConical,
+  PanelRightClose,
+  RefreshCw,
+  Settings2,
+  Sparkles,
+  Square,
+  X,
+} from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { PdfSelection, PdfViewerSource, SelectionAiRequest } from "../../../shared/pdf/domain"
 import type {
@@ -14,20 +31,30 @@ import type {
 import { conversationMessages } from "../../../shared/study/conversation"
 import { reusableGoalAnswer, savedGoalAnswer, savedGoalLesson } from "../../../shared/study/goal-context"
 import { sectionSummaryQuestion } from "../../../shared/study/section-summary"
-import { CitationChip } from "../features/study/CitationChip"
+import { AnswerBlocks } from "../features/study/AnswerBlocks"
 import { GoalList } from "../features/study/GoalList"
 import { LessonPlayer } from "../features/study/LessonPlayer"
 import { SectionList } from "../features/study/SectionList"
 import { useAiConnection } from "../features/study/useAiConnection"
 import { rpc } from "../rpc"
 
-const labels = {
-  "document-claim": "논문에서 확인",
-  inference: "해석·추론",
-  background: "배경 설명",
-  illustration: "교육용 예시",
-  unknown: "근거 부족",
-}
+const starterPrompts = [
+  {
+    label: "핵심 주장 요약",
+    question: "이 문서의 핵심 주장과 주요 결과를 페이지 근거와 함께 요약해 주세요.",
+  },
+  { label: "연구 방법 정리", question: "이 연구의 방법(대상, 설계, 측정, 분석)을 단계별로 정리해 주세요." },
+  {
+    label: "한계와 반론",
+    question: "저자들이 인정한 한계와, 제기될 수 있는 반론을 원문 근거와 함께 짚어 주세요.",
+  },
+]
+const tabs = [
+  ["goals", "학습 목표"],
+  ["sections", "섹션"],
+  ["chat", "대화"],
+  ["learning", "학습"],
+] as const
 const phaseLabels = {
   retrieving: "근거 찾는 중",
   generating: "학습 자료 작성 중",
@@ -35,13 +62,12 @@ const phaseLabels = {
   stopped: "중지됨",
   failed: "생성 실패",
 }
-type Tab = "chat" | "goals" | "sections" | "learning"
+type SidebarTab = "chat" | "goals" | "sections" | "learning"
 
 export function AiSidebar({
   selection,
   request,
   visible,
-  activePage,
   source,
   capture,
   onDismissCapture,
@@ -52,7 +78,6 @@ export function AiSidebar({
   selection: PdfSelection | null
   request: SelectionAiRequest | null
   visible: boolean
-  activePage: number
   source: PdfViewerSource
   capture: CaptureAsset | null
   onDismissCapture: () => void
@@ -71,11 +96,11 @@ export function AiSidebar({
     refreshProvider,
   } = useAiConnection()
   const [snapshot, setSnapshot] = useState<StudySnapshot | null>(null)
-  const [tab, setTab] = useState<Tab | "result">("goals")
+  const [tab, setTab] = useState<SidebarTab | "result">("goals")
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null)
   const [actionView, setActionView] = useState<{
     requestId: string
-    returnTab: Tab
+    returnTab: SidebarTab
     title: string
   } | null>(null)
   const [scope, setScope] = useState<StudyScope>({ type: "document" })
@@ -333,14 +358,6 @@ export function AiSidebar({
       return false
     }
   }
-  const exportStudy = async () => {
-    try {
-      const result = await rpc.request["study.export"]({ documentId: source.documentId })
-      if (result.saved) setError("학습 기록을 Markdown으로 저장했습니다.")
-    } catch (cause) {
-      report(cause)
-    }
-  }
   const resize = (event: React.PointerEvent<HTMLDivElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId)
     const startX = event.clientX,
@@ -368,6 +385,20 @@ export function AiSidebar({
     // index. A first-match section title would discard the goal's other sources.
     return { type: "document" }
   }
+  const indexComplete =
+    !!snapshot && snapshot.index.pageCount > 0 && snapshot.index.indexedPages >= snapshot.index.pageCount
+  const indexing = !indexComplete || !!snapshot?.index.ocrPages.length || !!snapshot?.index.failedPages.length
+  const fontSize = status?.sidebarFontSize ?? 14
+  const setFontSize = (next: number) => {
+    const value = Math.min(19, Math.max(12, next))
+    setStatus((current) => (current ? { ...current, sidebarFontSize: value } : current))
+    void rpc.request["ai.settings.update"]({ sidebarFontSize: value }).catch(report)
+  }
+  const modelLabel = loadingModels
+    ? "모델 불러오는 중…"
+    : (models.find((model) => model.id === status?.selectedModel)?.label ??
+      status?.selectedModel ??
+      "AI 연결 설정")
   const currentScope = (value: StudyScope): StudyScope =>
     value.type === "section" && !snapshot?.sections.some((section) => section.id === value.sectionId)
       ? { type: "document" }
@@ -384,71 +415,56 @@ export function AiSidebar({
       }
     >
       <div className="sidebar-resize-handle" onPointerDown={resize} aria-hidden="true" />
-      <header className="ai-header">
-        <div className="ai-heading-row">
-          <div className="ai-title">
-            <span>
-              <Sparkles size={15} />
-            </span>
-            <div>
-              <strong>Study workspace</strong>
-              <button
-                type="button"
-                className="study-model-status"
-                onClick={openSettings}
-                aria-label="모델 설정 열기"
-              >
-                {loadingModels
-                  ? "모델 불러오는 중…"
-                  : (models.find((model) => model.id === status?.selectedModel)?.label ??
-                    status?.selectedModel ??
-                    "AI 연결 설정")}
-                {status?.provider === "codex" && providerState?.connected && <span> · 연결됨</span>}
-              </button>
-            </div>
-          </div>
-          <div className="ai-header-actions">
-            <button
-              type="button"
-              className="icon-button"
-              onClick={() => window.dispatchEvent(new CustomEvent("pdfie:library-requested"))}
-              aria-label="학습 서재 열기"
-            >
-              <BookOpen size={16} />
-            </button>
-            <button
-              type="button"
-              className="icon-button"
-              onClick={() => void exportStudy()}
-              aria-label="학습 기록 내보내기"
-            >
-              <Download size={15} />
-            </button>
-            <button type="button" className="icon-button" onClick={openSettings} aria-label="AI 설정">
-              <Settings2 size={16} />
-            </button>
-            <button type="button" className="icon-button" onClick={onClose} aria-label="학습 공간 닫기">
-              <PanelRightClose size={17} />
-            </button>
-          </div>
-        </div>
-        <div className="ai-context-line">
-          <span>PDF</span>
-          <strong title={source.fileName}>{source.fileName}</strong>
-          <em>p. {activePage}</em>
-        </div>
+      <header className="ai-panel-header">
+        <TabList
+          role="tablist"
+          className="ai-panel-tabs"
+          aria-label="학습 공간"
+          size="md"
+          value={tab === "result" ? (actionView?.returnTab ?? "chat") : tab}
+          onChange={(value) => {
+            if (value === "learning") setSelectedLessonId(null)
+            setTab(value as SidebarTab)
+          }}
+        >
+          {tabs.map(([id, label]) => (
+            <Tab key={id} value={id} label={label} panelId="study-panel" />
+          ))}
+        </TabList>
+        <IconButton
+          variant="ghost"
+          label="학습 공간 닫기"
+          tooltip="학습 공간 닫기 (⌘/)"
+          icon={<PanelRightClose size={17} />}
+          onClick={onClose}
+        />
       </header>
-      <div
-        className="study-index-status"
-        role="status"
-        title={snapshot?.index.failedPageReasons
-          ?.map((failure) => `${failure.page}페이지: ${failure.message}`)
-          .join("\n")}
-      >
-        문서 준비 {snapshot?.index.indexedPages ?? 0}/{snapshot?.index.pageCount || "—"}페이지
-        {snapshot?.index.ocrPages.length ? ` · OCR 필요 ${snapshot.index.ocrPages.join(", ")}` : ""}
-        {snapshot?.index.failedPages.length ? ` · 분석 실패 ${snapshot.index.failedPages.join(", ")}` : ""}
-      </div>
+      {indexing && (
+        <div
+          className="study-index-status"
+          role="status"
+          title={snapshot?.index.failedPageReasons
+            ?.map((failure) => `${failure.page}페이지: ${failure.message}`)
+            .join("\n")}
+        >
+          <span>
+            {indexComplete ? "문서 준비됨" : "문서 준비 중"} · {snapshot?.index.indexedPages ?? 0}/
+            {snapshot?.index.pageCount || "—"}쪽
+            {snapshot?.index.ocrPages.length ? ` · OCR 필요 ${snapshot.index.ocrPages.join(", ")}` : ""}
+            {snapshot?.index.failedPages.length
+              ? ` · 분석 실패 ${snapshot.index.failedPages.join(", ")}`
+              : ""}
+          </span>
+          {!indexComplete && (
+            <i
+              className="index-progress"
+              style={{
+                width: `${Math.round(((snapshot?.index.indexedPages ?? 0) / Math.max(1, snapshot?.index.pageCount ?? 1)) * 100)}%`,
+              }}
+            />
+          )}
+        </div>
+      )}
       {!providerReady && !busy && !loadingModels && (
         <button type="button" className="study-connection-hint" onClick={openSettings}>
           {status?.provider === "codex" && providerState?.connected
@@ -457,31 +473,7 @@ export function AiSidebar({
           <Settings2 size={13} />
         </button>
       )}
-      <nav className="study-tabs" aria-label="학습 공간">
-        {(
-          [
-            ["goals", "학습 목표"],
-            ["sections", "섹션"],
-            ["chat", "대화"],
-            ["learning", "학습"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            type="button"
-            key={id}
-            aria-current={
-              tab === id || (tab === "result" && actionView?.returnTab === id) ? "page" : undefined
-            }
-            onClick={() => {
-              if (id === "learning") setSelectedLessonId(null)
-              setTab(id)
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
-      <div className="study-content">
+      <div className="study-content" id="study-panel" role="tabpanel">
         <GoalList
           hidden={tab !== "goals"}
           snapshot={snapshot}
@@ -577,19 +569,21 @@ export function AiSidebar({
           <div className="study-chat-messages">
             {tab === "result" && actionView && (
               <div className="study-action-heading">
-                <div className="study-actions">
-                  <button type="button" onClick={() => setTab(actionView.returnTab)}>
-                    ←{" "}
-                    {actionView.returnTab === "goals"
-                      ? "학습 목표로"
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  icon={<ArrowLeft size={14} />}
+                  label={`${
+                    actionView.returnTab === "goals"
+                      ? "학습 목표"
                       : actionView.returnTab === "sections"
-                        ? "섹션으로"
+                        ? "섹션"
                         : actionView.returnTab === "learning"
-                          ? "학습으로"
-                          : "대화로"}{" "}
-                    돌아가기
-                  </button>
-                </div>
+                          ? "학습"
+                          : "대화"
+                  }로 돌아가기`}
+                  onClick={() => setTab(actionView.returnTab)}
+                />
                 <h2>{actionView.title}</h2>
                 {displayedMessages[0]?.goalId && (
                   <div className="study-actions">
@@ -601,16 +595,17 @@ export function AiSidebar({
                           이전에 저장한 설명입니다. 현재 질문·원문 분석 기준으로 다시 작성할 수 있습니다.
                         </p>
                       )}
-                    <button
-                      type="button"
-                      disabled={!ready}
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      label="설명 다시 만들기"
+                      icon={<RefreshCw size={13} />}
+                      isDisabled={!ready}
                       onClick={() => {
                         const goal = snapshot?.goals.find((goal) => goal.id === displayedMessages[0]?.goalId)
                         if (goal) void generate("chat", goal.question, goalScope(goal), goal.id, null)
                       }}
-                    >
-                      설명 다시 만들기
-                    </button>
+                    />
                   </div>
                 )}
                 {!displayedMessages.length && <p role="status">원문을 확인하며 자료를 준비하고 있습니다…</p>}
@@ -618,41 +613,59 @@ export function AiSidebar({
             )}
             {tab === "chat" && !conversation.length && (
               <div className="ai-empty">
-                <Sparkles size={22} />
+                <span className="ai-empty-mark">
+                  <Sparkles size={18} />
+                </span>
                 <strong>원문과 함께 생각하기</strong>
-                <p>구절을 선택하거나 문서 전체·섹션을 범위로 질문하세요.</p>
+                <p>
+                  구절을 선택하거나, 문서 전체·섹션을 범위로 질문하세요. 답변의 모든 근거에 페이지가 붙습니다.
+                </p>
+                <div className="starter-prompts">
+                  {starterPrompts.map((prompt) => (
+                    <Button
+                      key={prompt.label}
+                      size="sm"
+                      variant="secondary"
+                      label={prompt.label}
+                      isDisabled={!ready}
+                      tooltip={ready ? prompt.question : unavailableReason}
+                      onClick={() =>
+                        void generate(
+                          "chat",
+                          prompt.question,
+                          { type: "document" },
+                          undefined,
+                          null,
+                          capture?.id ?? null,
+                          "composer",
+                        )
+                      }
+                    />
+                  ))}
+                </div>
               </div>
             )}
             {displayedMessages.map((message) => (
               <article className={`chat-message is-${message.role}`} key={message.id}>
-                {message.role === "assistant" && (
-                  <div className="assistant-label">
-                    <Sparkles size={11} /> {message.task === "summary" ? "섹션 요약" : "설명"} ·{" "}
-                    {message.state === "completed" ? message.model : message.state}
+                {message.role === "user" ? (
+                  <div className="user-bubble">
+                    <p>{message.text}</p>
                   </div>
-                )}
-                {message.blocks.length ? (
-                  message.blocks.map((block) => (
-                    <div className="answer-block" key={`${block.kind}-${block.text}`}>
-                      <span className={`claim-kind is-${block.kind}`}>{labels[block.kind]}</span>
-                      <p>{block.text}</p>
-                      <div className="answer-citations">
-                        {block.evidenceIds.map((id) => {
-                          const ref = message.evidence.find((e) => e.id === id)
-                          return ref ? <CitationChip key={id} evidence={ref} onReveal={onReveal} /> : null
-                        })}
-                      </div>
-                    </div>
-                  ))
                 ) : (
-                  <p className="message-text">
-                    {message.text ||
-                      message.error ||
-                      (message.state === "running" ? "근거를 확인하며 작성하고 있습니다…" : "중단된 응답")}
-                  </p>
-                )}
-                {message.role === "assistant" && (
-                  <small className="answer-coverage">{message.coverage}</small>
+                  <>
+                    {message.task === "summary" && <div className="assistant-label">섹션 요약</div>}
+                    {message.blocks.length ? (
+                      <AnswerBlocks blocks={message.blocks} evidence={message.evidence} onReveal={onReveal} />
+                    ) : (
+                      <p className="message-text" data-state={message.state}>
+                        {message.text ||
+                          message.error ||
+                          (message.state === "running"
+                            ? "근거를 확인하며 작성하고 있습니다…"
+                            : "중단된 응답")}
+                      </p>
+                    )}
+                  </>
                 )}
                 {message.draftText && message.state !== "completed" && (
                   <details className="response-draft">
@@ -663,46 +676,72 @@ export function AiSidebar({
                     <pre>{message.draftText}</pre>
                   </details>
                 )}
-                {message.text && (
-                  <button
-                    type="button"
-                    className="copy-message"
-                    onClick={() => void navigator.clipboard.writeText(message.text).catch(report)}
-                  >
-                    <Copy size={11} /> 복사
-                  </button>
-                )}
-                {message.role === "assistant" &&
-                  message.state === "completed" &&
-                  message.blocks.length > 0 && (
+                <div className="message-actions">
+                  {message.text && (
                     <button
                       type="button"
-                      className="explore-answer"
-                      disabled={!providerReady || !(snapshot?.index.blockCount || message.captureId)}
-                      onClick={() =>
-                        void generate(
-                          "lesson",
-                          `이 설명의 개념을 예측과 이해 점검으로 직접 탐구하고 싶습니다: ${message.text.slice(0, 3000)}`,
-                          currentScope(message.scope),
-                          message.goalId,
-                          message.scope.type === "selection"
-                            ? {
-                                text: message.evidence.map((ref) => ref.quote).join("\n"),
-                                normalizedText: message.evidence.map((ref) => ref.quote).join(" "),
-                                pages: message.evidence.map((ref) => ({
-                                  pageNumber: ref.pageIndex + 1,
-                                  rects: ref.rects,
-                                })),
-                                source: "viewer",
-                              }
-                            : null,
-                          message.captureId ?? null,
-                        )
-                      }
+                      className="message-action"
+                      title="복사"
+                      aria-label="메시지 복사"
+                      onClick={() => void navigator.clipboard.writeText(message.text).catch(report)}
                     >
-                      직접 탐구하기
+                      <Copy size={14} />
+                      {message.role === "user" && <span>복사</span>}
                     </button>
                   )}
+                  {message.role === "user" && (
+                    <button
+                      type="button"
+                      className="message-action"
+                      title="질문 다시 쓰기"
+                      onClick={() => {
+                        setQuestion(message.text)
+                        setTab("chat")
+                        requestAnimationFrame(() => composer.current?.focus())
+                      }}
+                    >
+                      <span>다시 쓰기</span>
+                    </button>
+                  )}
+                  {message.role === "assistant" &&
+                    message.state === "completed" &&
+                    message.blocks.length > 0 && (
+                      <button
+                        type="button"
+                        className="message-action"
+                        title="예측과 이해 점검으로 직접 탐구하기"
+                        disabled={!providerReady || !(snapshot?.index.blockCount || message.captureId)}
+                        onClick={() =>
+                          void generate(
+                            "lesson",
+                            `이 설명의 개념을 예측과 이해 점검으로 직접 탐구하고 싶습니다: ${message.text.slice(0, 3000)}`,
+                            currentScope(message.scope),
+                            message.goalId,
+                            message.scope.type === "selection"
+                              ? {
+                                  text: message.evidence.map((ref) => ref.quote).join("\n"),
+                                  normalizedText: message.evidence.map((ref) => ref.quote).join(" "),
+                                  pages: message.evidence.map((ref) => ({
+                                    pageNumber: ref.pageIndex + 1,
+                                    rects: ref.rects,
+                                  })),
+                                  source: "viewer",
+                                }
+                              : null,
+                            message.captureId ?? null,
+                          )
+                        }
+                      >
+                        <FlaskConical size={14} />
+                        <span>직접 탐구하기</span>
+                      </button>
+                    )}
+                  {message.role === "assistant" && message.coverage && (
+                    <small className="answer-coverage" title={message.coverage}>
+                      {message.state === "completed" ? message.model : message.state} · {message.coverage}
+                    </small>
+                  )}
+                </div>
               </article>
             ))}
             <div ref={messagesEnd} />
@@ -710,16 +749,30 @@ export function AiSidebar({
         )}
         {tab === "learning" && (
           <section className="learning-panel">
-            <span className="study-eyebrow">예측하고, 확인하고, 설명하기</span>
-            <h2>Interactive Learning</h2>
+            <header className="goal-list-heading">
+              <div className="goal-list-title">
+                <h2>직접 탐구하기</h2>
+                {!!snapshot?.lessons.length && (
+                  <span className="section-count">{snapshot.lessons.length}개 수업</span>
+                )}
+              </div>
+              <p className="section-list-hint">예측하고, 원문으로 확인하고, 자기 말로 설명해 보세요.</p>
+            </header>
             {selectedLessonId && (
               <div className="study-actions">
-                <button type="button" onClick={() => setSelectedLessonId(null)}>
-                  전체 학습 보기
-                </button>
-                <button
-                  type="button"
-                  disabled={!ready}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  label="전체 학습 보기"
+                  icon={<ArrowLeft size={14} />}
+                  onClick={() => setSelectedLessonId(null)}
+                />
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  label="학습 새로 만들기"
+                  icon={<RefreshCw size={13} />}
+                  isDisabled={!ready}
                   onClick={() => {
                     const lesson = snapshot?.lessons.find((item) => item.id === selectedLessonId)
                     const goal = snapshot?.goals.find((item) => item.id === lesson?.goalId)
@@ -732,9 +785,7 @@ export function AiSidebar({
                         null,
                       )
                   }}
-                >
-                  학습 새로 만들기
-                </button>
+                />
               </div>
             )}
             {!snapshot?.lessons.length && (
@@ -764,16 +815,16 @@ export function AiSidebar({
       {(error || connectionError) && (
         <div className="study-error" role="alert">
           <p>{error || connectionError}</p>
-          <button
-            type="button"
+          <IconButton
+            size="sm"
+            variant="ghost"
+            label="알림 닫기"
+            icon={<X size={14} />}
             onClick={() => {
               setError(null)
               setConnectionError(null)
             }}
-            aria-label="알림 닫기"
-          >
-            ×
-          </button>
+          />
         </div>
       )}
       {busy && (
@@ -782,116 +833,189 @@ export function AiSidebar({
             <i className="is-spinning" />
             {stopping === busy.requestId ? "생성을 중지하는 중" : phaseLabels[busy.phase]}
           </span>
-          <button type="button" disabled={stopping === busy.requestId} onClick={() => void stopGeneration()}>
-            <Square size={11} /> 중지
-          </button>
+          <Button
+            size="sm"
+            variant="secondary"
+            label="중지"
+            tooltip="생성 중지 (Esc)"
+            icon={<Square size={11} />}
+            isDisabled={stopping === busy.requestId}
+            onClick={() => void stopGeneration()}
+          />
         </div>
       )}
       {tab === "chat" && (
         <form
-          className="chat-composer study-composer"
+          className="study-composer"
           onSubmit={(e) => {
             e.preventDefault()
             sendQuestion()
           }}
         >
-          <label className="scope-picker">
-            질문 범위
-            <select
-              aria-label="질문 범위"
-              value={scope.type === "section" ? scope.sectionId : scope.type}
-              onChange={(e) =>
-                setScope(
-                  e.target.value === "document"
-                    ? { type: "document" }
-                    : e.target.value === "selection"
-                      ? { type: "selection" }
-                      : { type: "section", sectionId: e.target.value },
-                )
+          <div className="composer-card">
+            {(effectiveSelection || capture) && (
+              <div className="composer-attachments">
+                {effectiveSelection && (
+                  <div className="composer-quote">
+                    <div>
+                      <strong>
+                        선택 구절 · p.{" "}
+                        {[...new Set(effectiveSelection.pages.map((p) => p.pageNumber))].join(", ")}
+                      </strong>
+                      <p>{effectiveSelection.text.slice(0, 400)}</p>
+                    </div>
+                    <button
+                      type="button"
+                      className="attachment-remove"
+                      aria-label="인용 해제"
+                      title="인용 해제"
+                      onClick={() => {
+                        setDismissed(true)
+                        setQuoted(null)
+                        if (scope.type === "selection") setScope({ type: "document" })
+                      }}
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                )}
+                {capture && (
+                  <div className="composer-capture">
+                    <img src={capture.dataUrl} alt={`PDF ${capture.pageIndex + 1}페이지 캡처`} />
+                    <div>
+                      <strong>그림·표 · p. {capture.pageIndex + 1}</strong>
+                      {!models.find((m) => m.id === status?.selectedModel)?.vision && (
+                        <small>현재 모델의 이미지 지원을 확인할 수 없습니다.</small>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className="attachment-remove"
+                      aria-label="캡처 제거"
+                      title="캡처 제거"
+                      onClick={onDismissCapture}
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            <textarea
+              ref={composer}
+              aria-label="원문 질문"
+              value={question}
+              rows={2}
+              onChange={(e) => setQuestion(e.target.value)}
+              placeholder={
+                effectiveSelection ? "선택한 구절에 대해 물어보세요…" : "이 문서에 대해 물어보세요…"
               }
-            >
-              <option value="document">문서 전체</option>
-              <option value="selection" disabled={!effectiveSelection}>
-                선택한 구절
-              </option>
-              {snapshot?.sections.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {"\u3000".repeat(Math.min(s.level, 4) - 1)}
-                  {s.title}
-                  {s.kind === "back" ? " · 부가 정보" : ""}
-                </option>
-              ))}
-            </select>
-          </label>
-          {effectiveSelection && (
-            <div className="composer-selection">
-              <strong>
-                선택 구절 · PDF p. {effectiveSelection.pages.map((p) => p.pageNumber).join(", ")}
-              </strong>
-              <p>{effectiveSelection.text.slice(0, 400)}</p>
-              <button
-                type="button"
-                onClick={() => {
-                  setDismissed(true)
-                  setQuoted(null)
-                  if (scope.type === "selection") setScope({ type: "document" })
-                }}
-              >
-                인용 해제
-              </button>
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault()
+                  if (ready) sendQuestion()
+                }
+              }}
+            />
+            <div className="composer-footer">
+              <label className="scope-picker" title="질문 범위">
+                <span className="sr-only">질문 범위</span>
+                <select
+                  aria-label="질문 범위"
+                  value={scope.type === "section" ? scope.sectionId : scope.type}
+                  onChange={(e) =>
+                    setScope(
+                      e.target.value === "document"
+                        ? { type: "document" }
+                        : e.target.value === "selection"
+                          ? { type: "selection" }
+                          : { type: "section", sectionId: e.target.value },
+                    )
+                  }
+                >
+                  <option value="document">문서 전체</option>
+                  <option value="selection" disabled={!effectiveSelection}>
+                    선택한 구절
+                  </option>
+                  {snapshot?.sections.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {"\u3000".repeat(Math.min(s.level, 4) - 1)}
+                      {s.title}
+                      {s.kind === "back" ? " · 부가 정보" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <IconButton
+                variant="ghost"
+                size="sm"
+                label="그림·표 캡처"
+                tooltip="그림·표 캡처"
+                icon={<Camera size={15} />}
+                onClick={onStartCapture}
+              />
+              <IconButton
+                variant="ghost"
+                size="sm"
+                label="핵심 개념 설명"
+                tooltip="핵심 개념 설명"
+                icon={<Sparkles size={15} />}
+                isDisabled={!ready}
+                onClick={() => void generate("chat", "선택한 원문의 핵심 개념과 논리를 설명해 주세요.")}
+              />
+              <IconButton
+                type="submit"
+                className="send-button"
+                variant="primary"
+                size="sm"
+                label="질문 보내기"
+                tooltip="보내기 (Enter)"
+                icon={<ArrowUp size={16} />}
+                isDisabled={
+                  !ready ||
+                  !question.trim() ||
+                  (!!capture && !models.find((m) => m.id === status?.selectedModel)?.vision)
+                }
+              />
             </div>
-          )}
-          {capture && (
-            <div className="composer-capture">
-              <img src={capture.dataUrl} alt={`PDF ${capture.pageIndex + 1}페이지 캡처`} />
-              <span>그림·표 · p. {capture.pageIndex + 1}</span>
-              <button type="button" onClick={onDismissCapture}>
-                제거
-              </button>
-              {!models.find((m) => m.id === status?.selectedModel)?.vision && (
-                <small>현재 모델의 이미지 지원을 확인할 수 없습니다.</small>
-              )}
-            </div>
-          )}
-          <textarea
-            ref={composer}
-            aria-label="원문 질문"
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            placeholder="이 논문의 주장과 근거를 함께 살펴보세요…"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault()
-                if (ready) sendQuestion()
-              }
-            }}
-          />
-          <div className="composer-footer">
-            <button type="button" onClick={onStartCapture}>
-              그림·표 캡처
-            </button>
-            <button
-              type="button"
-              disabled={!ready}
-              onClick={() => void generate("chat", "선택한 원문의 핵심 개념과 논리를 설명해 주세요.")}
-            >
-              핵심 개념
-            </button>
-            <button
-              type="submit"
-              className="send-button"
-              disabled={
-                !ready ||
-                !question.trim() ||
-                (!!capture && !models.find((m) => m.id === status?.selectedModel)?.vision)
-              }
-              aria-label="질문 보내기"
-            >
-              <Send size={15} />
-            </button>
           </div>
         </form>
       )}
+      <footer className="ai-panel-footer">
+        <button type="button" className="model-status" onClick={openSettings} title="AI 연결 설정">
+          <i data-ready={providerReady || !!busy || undefined} />
+          {modelLabel}
+          {status?.provider === "codex" && providerState?.connected ? " · ChatGPT" : ""}
+        </button>
+        <div className="ai-panel-footer-actions">
+          <IconButton
+            variant="ghost"
+            size="sm"
+            label="글자 작게"
+            tooltip="글자 작게"
+            icon={<AArrowDown size={16} />}
+            isDisabled={fontSize <= 12}
+            onClick={() => setFontSize(fontSize - 1)}
+          />
+          <IconButton
+            variant="ghost"
+            size="sm"
+            label="글자 크게"
+            tooltip="글자 크게"
+            icon={<AArrowUp size={16} />}
+            isDisabled={fontSize >= 19}
+            onClick={() => setFontSize(fontSize + 1)}
+          />
+          <IconButton
+            variant="ghost"
+            size="sm"
+            label="AI 설정"
+            tooltip="AI 설정"
+            icon={<Settings2 size={15} />}
+            onClick={openSettings}
+          />
+        </div>
+      </footer>
     </aside>
   )
 }

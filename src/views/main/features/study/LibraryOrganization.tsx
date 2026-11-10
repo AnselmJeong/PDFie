@@ -1,3 +1,5 @@
+import { Button } from "@astryxdesign/core/Button"
+import { Sparkles } from "lucide-react"
 import { useEffect, useState } from "react"
 import type { LibraryDocument, LibraryFacets } from "../../../../shared/study/library"
 import { rpc } from "../../rpc"
@@ -86,9 +88,18 @@ export function LibraryOrganization({
           {classification?.pages?.length ? (
             <p>본문 발췌 {classification.pages.length}개 페이지 기준 · 언제든 수정할 수 있습니다.</p>
           ) : null}
-          <button
-            type="button"
-            disabled={pending || saving || topicEdited}
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={<Sparkles size={13} />}
+            label={
+              pending
+                ? "자동 분류 대기·처리 중"
+                : document.topic
+                  ? "AI로 주제 다시 지정"
+                  : "AI 분류 다시 시도"
+            }
+            isDisabled={pending || saving || topicEdited}
             onClick={async () => {
               setSaving(true)
               try {
@@ -100,13 +111,7 @@ export function LibraryOrganization({
                 setSaving(false)
               }
             }}
-          >
-            {pending
-              ? "자동 분류 대기·처리 중"
-              : document.topic
-                ? "AI로 주제 다시 지정"
-                : "AI 분류 다시 시도"}
-          </button>
+          />
           <p>직접 수정해 저장한 주제는 자동으로 덮어쓰지 않습니다.</p>
         </div>
         <fieldset>
@@ -129,9 +134,7 @@ export function LibraryOrganization({
           {!facets.collections.length && <p>서재 왼쪽의 ‘컬렉션 만들기’로 연구 묶음을 추가하세요.</p>}
         </fieldset>
         <div>
-          <button type="submit" disabled={saving}>
-            {saving ? "저장 중…" : "분류 저장"}
-          </button>
+          <Button type="submit" size="sm" variant="primary" label="분류 저장" isLoading={saving} />
           {saved && <span role="status">저장했습니다.</span>}
         </div>
       </form>
