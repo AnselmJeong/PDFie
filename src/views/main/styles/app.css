@@ -77,8 +77,14 @@
       0 10px 28px -8px light-dark(oklch(0 0 0 / 14%), oklch(0 0 0 / 70%));
     --focus-ring: 0 0 0 3px color-mix(in srgb, var(--ring) 32%, transparent);
     --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-    /* Room for the inset macOS window controls at a title bar's leading edge. */
+    /* Room for the inset macOS window controls at a title bar's leading edge:
+       buttons at x 18 (src/bun/index.ts WINDOW_BUTTONS) span about 54px. */
     --traffic-light-inset: 80px;
+  }
+  /* Full screen hides the window controls, so title bars start at the edge. */
+  html[data-fullscreen],
+  html[data-fullscreen] [data-astryx-theme] {
+    --traffic-light-inset: 14px;
   }
 }
 
@@ -2574,7 +2580,7 @@
 
   .library-titlebar {
     display: grid;
-    min-height: 52px;
+    min-height: 48px;
     flex: 0 0 auto;
     grid-template-columns: minmax(180px, 1fr) minmax(240px, 480px) minmax(180px, 1fr);
     align-items: center;

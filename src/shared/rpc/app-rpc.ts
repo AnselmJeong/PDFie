@@ -126,6 +126,7 @@ export type AppRPC = {
       "ai.provider.cancelLogin": { params: Record<string, never>; response: { cancelled: true } }
       "ai.provider.logout": { params: Record<string, never>; response: { loggedOut: true } }
       "app.window.zoom": { params: Record<string, never>; response: { zoomed: boolean } }
+      "app.window.state": { params: Record<string, never>; response: { fullScreen: boolean } }
       "app.ping": { params: Record<string, never>; response: { ok: true; renderer: "native" } }
       "pdf.openDialog": { params: Record<string, never>; response: PdfOpenResult | null }
       "pdf.prepareDrop": {
@@ -178,6 +179,7 @@ export type AppRPC = {
       "study.records.changed": { documentHash: string }
       "pdf.openRequested": Record<string, never>
       "library.openRequested": Record<string, never>
+      "app.window.fullScreen": { fullScreen: boolean }
       "ai.token": { requestId: string; token: string }
       "study.event": StudyEvent
     }

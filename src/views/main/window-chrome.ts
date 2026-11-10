@@ -16,3 +16,9 @@ export function installTitleBarZoom(zoom: () => Promise<unknown>) {
     void zoom().catch(() => undefined)
   })
 }
+
+/** macOS hides the window controls in full screen; title bars drop their leading inset. */
+export function setFullScreenChrome(fullScreen: boolean) {
+  if (fullScreen) document.documentElement.dataset.fullscreen = "true"
+  else delete document.documentElement.dataset.fullscreen
+}

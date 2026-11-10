@@ -117,6 +117,7 @@ interface ZoomableWindow {
   isMaximized(): boolean
   maximize(): void
   unmaximize(): void
+  isFullScreen(): boolean
 }
 /** Each window's RPC resolves its own window lazily, after the window exists. */
 const zoomTargets: { main: ZoomableWindow | null } = { main: null }
@@ -253,6 +254,7 @@ function createAppRpc(ownWindow: () => ZoomableWindow | null = () => null) {
           else target.maximize()
           return { zoomed: true }
         },
+        "app.window.state": async () => ({ fullScreen: ownWindow()?.isFullScreen() ?? false }),
         "app.settings.close": async () => {
           // Return the RPC response before its webview is destroyed.
           setTimeout(() => settingsWindow?.close(), 50)
@@ -433,6 +435,25 @@ function createAppRpc(ownWindow: () => ZoomableWindow | null = () => null) {
   })
 }
 
+/**
+ * Inset title bars: place the window controls at an absolute position that
+ * centres them in the 48px title bars (close button origin; Electrobun keeps
+ * it after resizes and full screen), and tell the view when full screen
+ * changes, since macOS hides the controls there and the title bar can drop
+ * its leading inset.
+ */
+const WINDOW_BUTTONS = { x: 18, y: 16 }
+function applyInsetChrome(window: BrowserWindow<ReturnType<typeof createAppRpc>>) {
+  window.setWindowButtonPosition(WINDOW_BUTTONS.x, WINDOW_BUTTONS.y)
+  let fullScreen = false
+  window.on("resize", () => {
+    const next = window.isFullScreen()
+    if (next === fullScreen) return
+    fullScreen = next
+    window.webview.rpc?.proxy.send["app.window.fullScreen"]({ fullScreen })
+  })
+}
+
 const mainWindow = new BrowserWindow({
   title: "PDFie",
   url: "views://main/index.html",
@@ -442,6 +463,7 @@ const mainWindow = new BrowserWindow({
 })
 
 zoomTargets.main = mainWindow
+applyInsetChrome(mainWindow)
 
 function appWindows() {
   return settingsWindow ? [mainWindow, settingsWindow] : [mainWindow]
@@ -503,6 +525,7 @@ function openSettingsWindow(documentId?: string) {
     Math.round(parent.y + (parent.height - actualSize.height) / 2),
   )
   window.webview.setNavigationRules(["^*", "views://main/*"])
+  applyInsetChrome(window)
   window.on("close", () => {
     if (settingsWindow === window) settingsWindow = null
   })

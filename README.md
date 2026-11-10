@@ -74,7 +74,7 @@ OpenIntelligentUI integration ports its MIT-licensed design system and CSS → H
 
 ## Reader
 
-Windows use an inset title bar: the app's own title bars are draggable, and double-clicking empty space zooms the window. The title bar holds navigation, the document title, search, capture, annotations,
+Windows use an inset title bar: the app's own title bars are draggable, the window controls sit centred in them, and double-clicking empty space zooms the window. In full screen the title bars start at the window edge. The title bar holds navigation, the document title, search, capture, annotations,
 **Ask AI** (toggles the study panel, **⌘/**) and a **⋯** menu for document type,
 rotation, focus mode, export, settings and closing the document. A floating page
 dock on the canvas controls the view (one/two pages, actual size, fit page/width),

@@ -1,5 +1,6 @@
 import { Electroview } from "electrobun/view"
 import type { AppRPC } from "../../shared/rpc/app-rpc"
+import { setFullScreenChrome } from "./window-chrome"
 
 export const rpc = Electroview.defineRPC<AppRPC>({
   maxRequestTime: 60_000,
@@ -19,6 +20,7 @@ export const rpc = Electroview.defineRPC<AppRPC>({
         window.dispatchEvent(new CustomEvent("pdfie:open-requested"))
       },
       "library.openRequested": () => window.dispatchEvent(new CustomEvent("pdfie:library-requested")),
+      "app.window.fullScreen": ({ fullScreen }) => setFullScreenChrome(fullScreen),
       "ai.token": (detail) => {
         window.dispatchEvent(new CustomEvent("pdfie:ai-token", { detail }))
       },

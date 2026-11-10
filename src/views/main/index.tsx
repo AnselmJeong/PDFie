@@ -7,9 +7,12 @@ import { App } from "./App"
 import { SettingsWindow } from "./components/SettingsWindow"
 import { rpc } from "./rpc"
 import { pdfieTheme } from "./theme/pdfie"
-import { installTitleBarZoom } from "./window-chrome"
+import { installTitleBarZoom, setFullScreenChrome } from "./window-chrome"
 
 installTitleBarZoom(() => rpc.request["app.window.zoom"]({}))
+void rpc.request["app.window.state"]({})
+  .then((state) => setFullScreenChrome(state.fullScreen))
+  .catch(() => undefined)
 
 /** The saved appearance (system, light or dark) applies to every window. */
 function AppTheme({ children }: { children: ReactNode }) {
