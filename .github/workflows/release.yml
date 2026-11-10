@@ -72,7 +72,12 @@ jobs:
         run: |
           notes="docs/releases/${GITHUB_REF_NAME}.md"
           if [ ! -f "$notes" ]; then notes=/dev/null; fi
-          gh release create "$GITHUB_REF_NAME" artifacts/* \
-            --title "PDFie ${GITHUB_REF_NAME}" \
-            --notes-file "$notes" \
-            --verify-tag
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            # A release drafted in the web UI: attach the build to it.
+            gh release upload "$GITHUB_REF_NAME" artifacts/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" artifacts/* \
+              --title "PDFie ${GITHUB_REF_NAME}" \
+              --notes-file "$notes" \
+              --verify-tag
+          fi
