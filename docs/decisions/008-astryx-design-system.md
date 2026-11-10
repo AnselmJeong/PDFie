@@ -1,7 +1,7 @@
 # ADR 008: Astryx design system and reader workspace redesign
 
 Date: 2026-11-10  
-Status: Phase 1 implemented (reader, study panel, selection card, tokens); later phases planned
+Status: Phases 1–2 implemented (reader, study panel, selection card, tokens; library); later phases planned
 
 ## Context
 
@@ -38,6 +38,16 @@ Adopt [Astryx](https://github.com/meta/astryx) (`@astryxdesign/core` 0.7.11, MIT
 - The composer is one card: quoted passage and capture chips, the question, then scope, capture, key-concept and send.
 - A footer shows the model and connection state and A−/A+ reading size (the existing `sidebarFontSize` setting).
 
+### Library (phase 2)
+
+- The library shares the reader's title bar: brand (or **서재** back button in a paper's detail), search, **읽던 PDF**, an **추가** menu (PDF 열기 ⌘O, PDF 여러 개 가져오기, 폴더 가져오기) and settings. The separate intake bar and the topic-cleanup disclosure are gone.
+- The sidebar is an Astryx `SideNav`: kinds (전체 자료, 수업 있는 자료, 즐겨찾기, 보관함), topics with counts and 미분류, and collections with a per-row menu (rename, delete). Selecting a selected topic or collection again clears it; facets still combine, and active ones show as removable `Token`s above the results.
+- Batch import progress and results are an Astryx `Banner` above the catalog with a `ProgressBar`; details expand on demand, and a finished batch can be dismissed.
+- Topic cleanup, collection create/rename and paper rename are `Dialog`s; collection and paper deletion use `AlertDialog`.
+- Cards lead with a topic `Badge` (a stable hue per topic), the title (three lines), collections and a passed-check bar; list view is a single bordered table. Sort is a ghost `Selector`, view a `SegmentedControl`.
+- The paper detail header uses Astryx buttons (원문 PDF 열기 primary) and a ⋯ menu for rename, archive, relink and delete; content tabs are a `TabList`.
+- The unused `EmptyLibrary` component and about 1,700 lines of superseded library CSS were removed.
+
 ## Consequences
 
 - Astryx is pre-1.0. Pin exact versions and use `astryx upgrade --apply` codemods when moving.
@@ -46,7 +56,6 @@ Adopt [Astryx](https://github.com/meta/astryx) (`@astryxdesign/core` 0.7.11, MIT
 
 ## Later phases
 
-1. Library: header as the same title bar, cards and filters on Astryx `Card`, `SideNav`, `TextInput`, `Selector`, `SegmentedControl`.
-2. Settings window on Astryx `Field`, `TextInput`, `Selector`, `Switch`, `Button`.
-3. Goal and section lists, lesson player and import panels on Astryx primitives; replace remaining hand-rolled toasts with `ToastViewport`/`useToast`.
-4. Optionally a `defineTheme` extension of neutral (built with `astryx theme build`) once PDFie needs its own accent or component overrides.
+1. Settings window on Astryx `Field`, `TextInput`, `Selector`, `Switch`, `Button`.
+2. Goal and section lists, the paper classification form, lesson player on Astryx primitives; replace remaining hand-rolled toasts with `ToastViewport`/`useToast`.
+3. Optionally a `defineTheme` extension of neutral (built with `astryx theme build`) once PDFie needs its own accent or component overrides.

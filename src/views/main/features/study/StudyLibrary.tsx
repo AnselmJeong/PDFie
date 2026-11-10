@@ -1,11 +1,26 @@
+import { AlertDialog } from "@astryxdesign/core/AlertDialog"
+import { Button } from "@astryxdesign/core/Button"
+import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog"
+import { DropdownMenu, DropdownMenuDivider, DropdownMenuItem } from "@astryxdesign/core/DropdownMenu"
+import { IconButton } from "@astryxdesign/core/IconButton"
+import { Kbd } from "@astryxdesign/core/Kbd"
+import { Tab, TabList } from "@astryxdesign/core/TabList"
+import { TextInput } from "@astryxdesign/core/TextInput"
 import {
   Archive,
+  ArchiveRestore,
   ArrowLeft,
   BookOpen,
   Download,
+  Ellipsis,
+  Files,
   FileText,
+  FolderInput,
   FolderOpen,
-  MoreHorizontal,
+  Link2,
+  Pencil,
+  Plus,
+  Search,
   Settings2,
   Star,
   Trash2,
@@ -26,10 +41,10 @@ import { rpc } from "../../rpc"
 import { AnswerBlocks } from "./AnswerBlocks"
 import { CitationChip } from "./CitationChip"
 import { LessonPlayer } from "./LessonPlayer"
-import { EMPTY_FACETS, LibraryCatalog } from "./LibraryCatalog"
-import { LibraryIntake } from "./LibraryIntake"
+import { EMPTY_FACETS, LibraryCatalog, topicTone } from "./LibraryCatalog"
+import { LibraryImportBanner, useLibraryImport } from "./LibraryIntake"
 import { LibraryOrganization } from "./LibraryOrganization"
-import { LibraryTopics } from "./LibraryTopics"
+import { TopicCleanupDialog } from "./LibraryTopics"
 
 const date = (value: string) =>
   Date.parse(value) > 0
@@ -143,9 +158,10 @@ export function StudyLibrary({
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState("")
   const [busy, setBusy] = useState(false)
-  const [manage, setManage] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [rename, setRename] = useState<string | null>(null)
+  const [topicsOpen, setTopicsOpen] = useState(false)
+  const intake = useLibraryImport()
   const listSequence = useRef(0)
   const detailSequence = useRef(0)
   const selectedRef = useRef(selected)
@@ -226,7 +242,6 @@ export function StudyLibrary({
       return
     }
     setEvidence(null)
-    setManage(false)
     setConfirmDelete(false)
     setRename(null)
     setError(null)
@@ -251,14 +266,12 @@ export function StudyLibrary({
   }, [loadList, loadDetail])
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return
-      if (confirmDelete) setConfirmDelete(false)
-      else if (manage) setManage(false)
-      else if (evidence) setEvidence(null)
+      if (event.key !== "Escape" || confirmDelete || rename !== null) return
+      if (evidence) setEvidence(null)
     }
     window.addEventListener("keydown", key)
     return () => window.removeEventListener("keydown", key)
-  }, [confirmDelete, manage, evidence])
+  }, [confirmDelete, rename, evidence])
   const run = async (action: () => Promise<unknown>) => {
     if (busy) return
     setBusy(true)
@@ -302,42 +315,96 @@ export function StudyLibrary({
 
   return (
     <main className="study-library">
-      <header className="library-topbar">
-        <div className="library-brand">
-          <BookOpen size={21} />
-          <span>
-            PDFie <strong>학습 서재</strong>
-          </span>
-        </div>
-        <div className="library-top-actions">
-          {onReturn && (
-            <button type="button" onClick={onReturn}>
-              <ArrowLeft size={15} /> 읽던 PDF로 돌아가기
-            </button>
+      <header className="library-titlebar">
+        <div className="library-titlebar-leading">
+          {selected ? (
+            <Button
+              variant="ghost"
+              label="서재"
+              tooltip="서재로 돌아가기"
+              icon={<ArrowLeft size={16} />}
+              onClick={() => setSelected(null)}
+            />
+          ) : (
+            <span className="library-brand">
+              <span className="library-brand-mark" aria-hidden="true">
+                <BookOpen size={15} />
+              </span>
+              학습 서재
+            </span>
           )}
-          <button type="button" className="library-primary" disabled={opening} onClick={onOpenPdf}>
-            <FolderOpen size={15} />
-            {opening ? "여는 중…" : "PDF 열기"}
-          </button>
-          <button
-            type="button"
-            aria-label="설정"
-            onClick={() => void rpc.request["app.settings.open"]({}).catch(report)}
-          >
-            <Settings2 size={17} />
-          </button>
         </div>
-      </header>
-      <LibraryIntake />
-      <div className="library-workspace">
-        <div className="library-browse-surface" hidden={Boolean(selected)}>
-          <LibraryTopics
-            facets={facets}
-            onChanged={() => {
-              setTopic(undefined)
-              void loadList()
+        <div className="library-titlebar-search">
+          <TextInput
+            type="search"
+            label="서재 검색"
+            isLabelHidden
+            size="sm"
+            startIcon={Search}
+            placeholder="제목, 주제, 학습 내용 검색"
+            value={query}
+            onChange={(value) => {
+              setQuery(value)
+              if (selected) setSelected(null)
             }}
           />
+        </div>
+        <div className="library-titlebar-trailing">
+          {onReturn && (
+            <Button
+              variant="ghost"
+              label="읽던 PDF"
+              tooltip="읽던 PDF로 돌아가기"
+              icon={<FileText size={15} />}
+              onClick={onReturn}
+            />
+          )}
+          <DropdownMenu
+            alignment="end"
+            menuWidth={248}
+            button={{
+              label: "추가",
+              variant: "primary",
+              size: "md",
+              icon: <Plus size={15} />,
+              isLoading: opening || intake.choosing,
+            }}
+          >
+            <DropdownMenuItem
+              label="PDF 열기"
+              description="한 편을 열어 바로 읽기"
+              icon={FolderOpen}
+              endContent={<Kbd keys="mod+o" />}
+              isDisabled={opening}
+              onClick={onOpenPdf}
+            />
+            <DropdownMenuDivider />
+            <DropdownMenuItem
+              label="PDF 여러 개 가져오기…"
+              description="중복은 제외하고 본문 분석 후 자동 분류"
+              icon={Files}
+              isDisabled={intake.active}
+              onClick={() => void intake.choose("files")}
+            />
+            <DropdownMenuItem
+              label="폴더 가져오기…"
+              description="하위 폴더까지 찾아서 추가"
+              icon={FolderInput}
+              isDisabled={intake.active}
+              onClick={() => void intake.choose("folder")}
+            />
+          </DropdownMenu>
+          <IconButton
+            variant="ghost"
+            label="설정"
+            tooltip="설정 (⌘,)"
+            icon={<Settings2 size={17} />}
+            onClick={() => void rpc.request["app.settings.open"]({}).catch(report)}
+          />
+        </div>
+      </header>
+      <div className="library-workspace">
+        <div className="library-browse-surface" hidden={Boolean(selected)}>
           <LibraryCatalog
             page={page}
             facets={facets}
@@ -353,8 +420,26 @@ export function StudyLibrary({
             onSelect={setSelected}
             onMore={() => void loadList(true)}
             currentHash={currentHash}
-            onOpenPdf={onOpenPdf}
-            opening={opening}
+            onManageTopics={() => setTopicsOpen(true)}
+            banner={<LibraryImportBanner intake={intake} />}
+            emptyAction={
+              <div className="library-empty-actions">
+                <Button
+                  variant="primary"
+                  label="PDF 열기"
+                  icon={<FolderOpen size={15} />}
+                  isLoading={opening}
+                  onClick={onOpenPdf}
+                />
+                <Button
+                  variant="secondary"
+                  label="폴더 가져오기"
+                  icon={<FolderInput size={15} />}
+                  isDisabled={intake.active}
+                  onClick={() => void intake.choose("folder")}
+                />
+              </div>
+            }
             onCollectionSave={async (name, id) => {
               try {
                 await rpc.request["library.collection.save"]({ name, id })
@@ -383,45 +468,24 @@ export function StudyLibrary({
           aria-label="선택한 학습 자료"
           aria-busy={detailLoading}
         >
-          <div className="library-detail-back">
-            <button type="button" onClick={() => setSelected(null)}>
-              <ArrowLeft size={15} /> 서재로 돌아가기
-            </button>
-          </div>
           {detailLoading ? (
             <p className="library-loading" role="status">
               학습 내용 불러오는 중…
             </p>
           ) : !doc || !snapshot ? (
-            <div className="library-welcome">
-              <BookOpen size={34} strokeWidth={1.25} />
-              <p className="eyebrow">READ · EXPLORE · REVISIT</p>
-              <h1>
-                읽은 논문이
-                <br />
-                나의 학습 자료로.
-              </h1>
-              <p>
-                논문을 선택해 저장된 수업을 이어 가세요.
-                <br />
-                설명, 실험, 이해 점검과 원문 발췌는
-                <br />
-                PDF가 없어도 다시 볼 수 있습니다.
-              </p>
-              {!page.total && (
-                <button className="library-primary" type="button" disabled={opening} onClick={onOpenPdf}>
-                  <FolderOpen size={16} /> PDF를 열고 시작하기
-                </button>
-              )}
-              <small>새 수업 만들기와 AI 질문은 PDF의 학습 공간에서 시작합니다.</small>
+            <div className="library-browser-empty">
+              <h2>학습 자료를 찾지 못했습니다</h2>
+              <p>목록으로 돌아가 다시 선택해 주세요.</p>
+              <Button variant="secondary" label="서재로 돌아가기" onClick={() => setSelected(null)} />
             </div>
           ) : (
             <>
               <header className="library-detail-header">
                 <div className="library-detail-kicker">
-                  <span>{doc.archived ? "보관함" : "나의 학습 자료"}</span>
+                  {doc.topic && <span data-tone={topicTone(doc.topic)}>{doc.topic}</span>}
+                  {doc.archived && <span>보관함</span>}
                   <span>
-                    {doc.pageCount ? `${doc.pageCount}페이지 · ` : ""}최근 학습 {date(doc.updatedAt)}
+                    {doc.pageCount ? `${doc.pageCount}쪽 · ` : ""}최근 학습 {date(doc.updatedAt)}
                   </span>
                 </div>
                 <h1>{doc.title}</h1>
@@ -429,22 +493,27 @@ export function StudyLibrary({
                   <p className="library-filename">{doc.fileName}</p>
                 )}
                 <div className="library-detail-actions">
-                  <button type="button" disabled={busy} onClick={() => openOriginal()}>
-                    <FileText size={14} />
-                    {doc.sourceAvailable ? "원문 PDF 열기" : "원문 PDF 연결…"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
+                  <Button
+                    variant="primary"
+                    label={doc.sourceAvailable ? "원문 PDF 열기" : "원문 PDF 연결…"}
+                    icon={<FileText size={15} />}
+                    isDisabled={busy}
+                    onClick={() => openOriginal()}
+                  />
+                  <Button
+                    variant="secondary"
+                    label={doc.favorite ? "즐겨찾기됨" : "즐겨찾기"}
+                    icon={<Star size={15} fill={doc.favorite ? "currentColor" : "none"} />}
                     aria-pressed={doc.favorite}
+                    isDisabled={busy}
                     onClick={() => update({ favorite: !doc.favorite })}
-                  >
-                    <Star size={14} fill={doc.favorite ? "currentColor" : "none"} />
-                    {doc.favorite ? "즐겨찾기됨" : "즐겨찾기"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
+                  />
+                  <Button
+                    variant="secondary"
+                    label="내보내기"
+                    tooltip="수업·대화·근거·점검 결과를 Markdown으로"
+                    icon={<Download size={15} />}
+                    isDisabled={busy}
                     onClick={() =>
                       void run(async () => {
                         const result = await rpc.request["library.export"]({ documentHash: doc.documentHash })
@@ -454,109 +523,102 @@ export function StudyLibrary({
                           )
                       })
                     }
+                  />
+                  <DropdownMenu
+                    alignment="end"
+                    menuWidth={220}
+                    renderTrigger={(trigger) => (
+                      <IconButton
+                        {...trigger}
+                        variant="secondary"
+                        label="자료 관리"
+                        tooltip="자료 관리"
+                        icon={<Ellipsis size={16} />}
+                      />
+                    )}
                   >
-                    <Download size={14} /> 내보내기
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="자료 관리"
-                    aria-expanded={manage}
-                    onClick={() => {
-                      setManage(!manage)
-                      setConfirmDelete(false)
-                      setRename(null)
-                    }}
-                  >
-                    <MoreHorizontal size={17} />
-                  </button>
+                    <DropdownMenuItem
+                      label="제목 바꾸기"
+                      icon={Pencil}
+                      onClick={() => setRename(doc.title)}
+                    />
+                    <DropdownMenuItem
+                      label={doc.archived ? "보관함에서 꺼내기" : "보관함으로 옮기기"}
+                      icon={doc.archived ? ArchiveRestore : Archive}
+                      onClick={() => update({ archived: !doc.archived })}
+                    />
+                    <DropdownMenuItem
+                      label="원문 다시 연결…"
+                      icon={Link2}
+                      onClick={() => openOriginal(undefined, true)}
+                    />
+                    <DropdownMenuDivider />
+                    <DropdownMenuItem
+                      label="자료 삭제…"
+                      icon={Trash2}
+                      variant="destructive"
+                      onClick={() => setConfirmDelete(true)}
+                    />
+                  </DropdownMenu>
                 </div>
                 <p className="library-offline-note">
                   {doc.sourceAvailable
                     ? "저장된 수업은 AI 연결 없이 복습할 수 있습니다."
                     : "원문 PDF가 없어도 수업·대화·근거 발췌를 복습할 수 있습니다."}
                 </p>
-                {manage && (
-                  <div className="library-management">
-                    <div className="library-management-actions">
-                      <button type="button" disabled={busy} onClick={() => setRename(doc.title)}>
-                        제목 바꾸기
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => update({ archived: !doc.archived })}
-                      >
-                        <Archive size={14} />
-                        {doc.archived ? "보관함에서 꺼내기" : "보관함으로 옮기기"}
-                      </button>
-                      <button type="button" disabled={busy} onClick={() => openOriginal(undefined, true)}>
-                        원문 다시 연결…
-                      </button>
-                      <button
-                        type="button"
-                        className="library-danger"
-                        disabled={busy}
-                        onClick={() => setConfirmDelete(true)}
-                      >
-                        <Trash2 size={14} /> 자료 삭제…
-                      </button>
-                    </div>
-                    {rename !== null && (
-                      <form
-                        className="library-rename"
-                        onSubmit={(event) => {
-                          event.preventDefault()
-                          update({ title: rename })
-                          setRename(null)
-                        }}
-                      >
-                        <input
-                          aria-label="학습 자료 제목"
-                          maxLength={500}
-                          value={rename}
-                          onChange={(event) => setRename(event.target.value)}
-                        />
-                        <button type="submit" disabled={busy || !rename.trim()}>
-                          저장
-                        </button>
-                        <button type="button" onClick={() => setRename(null)}>
-                          취소
-                        </button>
-                      </form>
-                    )}
-                    {confirmDelete && (
-                      <div className="library-delete-confirm">
-                        <strong>‘{doc.title}’의 학습 자료를 삭제할까요?</strong>
-                        <p>
-                          수업, 대화, 목표, 점검 결과와 저장된 캡처가 삭제됩니다. 원본 PDF와 PDF 주석은
-                          유지됩니다. 삭제 전 내보내기로 기록을 남길 수 있습니다.
-                        </p>
-                        <button
-                          type="button"
-                          className="library-danger"
-                          disabled={busy}
-                          onClick={() =>
-                            void run(async () => {
-                              await rpc.request["library.delete"]({ documentHash: doc.documentHash })
-                              setSelected(null)
-                              setDetail(null)
-                              setConfirmDelete(false)
-                              setManage(false)
-                              onDeleted(doc.documentHash)
-                              setNotice("학습 자료를 삭제했습니다.")
-                              void loadList()
-                            })
-                          }
-                        >
-                          학습 자료 삭제
-                        </button>
-                        <button type="button" disabled={busy} onClick={() => setConfirmDelete(false)}>
-                          취소
-                        </button>
-                      </div>
-                    )}
+                <Dialog
+                  isOpen={rename !== null}
+                  onOpenChange={(open) => !open && setRename(null)}
+                  width={460}
+                  purpose="form"
+                >
+                  <DialogHeader title="제목 바꾸기" onOpenChange={(open) => !open && setRename(null)} />
+                  <div className="dialog-body">
+                    <TextInput
+                      label="학습 자료 제목"
+                      value={rename ?? ""}
+                      onChange={(value) => setRename(value.slice(0, 500))}
+                      onEnter={() => {
+                        if (!rename?.trim()) return
+                        update({ title: rename })
+                        setRename(null)
+                      }}
+                    />
                   </div>
-                )}
+                  <footer className="dialog-footer">
+                    <span className="dialog-footer-spacer" />
+                    <Button variant="secondary" label="취소" onClick={() => setRename(null)} />
+                    <Button
+                      variant="primary"
+                      label="저장"
+                      isDisabled={busy || !rename?.trim()}
+                      onClick={() => {
+                        update({ title: rename ?? "" })
+                        setRename(null)
+                      }}
+                    />
+                  </footer>
+                </Dialog>
+                <AlertDialog
+                  isOpen={confirmDelete}
+                  onOpenChange={setConfirmDelete}
+                  title={`‘${doc.title}’의 학습 자료를 삭제할까요?`}
+                  description="수업, 대화, 목표, 점검 결과와 저장된 캡처가 삭제됩니다. 원본 PDF와 PDF 주석은 유지됩니다. 삭제 전 내보내기로 기록을 남길 수 있습니다."
+                  actionLabel="학습 자료 삭제"
+                  cancelLabel="취소"
+                  isActionLoading={busy}
+                  onAction={() =>
+                    void run(async () => {
+                      await rpc.request["library.delete"]({ documentHash: doc.documentHash })
+                      setSelected(null)
+                      setDetail(null)
+                      setConfirmDelete(false)
+                      onDeleted(doc.documentHash)
+                      setNotice("학습 자료를 삭제했습니다.")
+                      void loadList()
+                    })
+                  }
+                />
               </header>
               <LibraryOrganization
                 key={doc.documentHash}
@@ -565,28 +627,20 @@ export function StudyLibrary({
                 onSaved={refresh}
                 onError={setError}
               />
-              <nav className="library-content-tabs" aria-label="저장된 학습 내용">
-                {(
-                  [
-                    ["lessons", "Interactive learning", snapshot.lessons.length],
-                    ["goals", "학습 목표", snapshot.goals.length],
-                    ["notes", "요약·설명·대화", explanations.length + conversations.length],
-                  ] as const
-                ).map(([id, label, count]) => (
-                  <button
-                    type="button"
-                    key={id}
-                    aria-current={tab === id ? "page" : undefined}
-                    onClick={() => {
-                      setTab(id)
-                      setEvidence(null)
-                    }}
-                  >
-                    {label}
-                    <span>{count}</span>
-                  </button>
-                ))}
-              </nav>
+              <TabList
+                className="library-content-tabs"
+                aria-label="저장된 학습 내용"
+                hasDivider
+                value={tab}
+                onChange={(value) => {
+                  setTab(value as typeof tab)
+                  setEvidence(null)
+                }}
+              >
+                <Tab value="lessons" label={`수업 ${snapshot.lessons.length}`} />
+                <Tab value="goals" label={`학습 목표 ${snapshot.goals.length}`} />
+                <Tab value="notes" label={`요약·설명·대화 ${explanations.length + conversations.length}`} />
+              </TabList>
               <div className="library-detail-scroll" ref={detailScroll}>
                 {tab === "lessons" &&
                   (snapshot.lessons.length ? (
@@ -780,6 +834,15 @@ export function StudyLibrary({
           )}
         </section>
       </div>
+      <TopicCleanupDialog
+        facets={facets}
+        isOpen={topicsOpen}
+        onOpenChange={setTopicsOpen}
+        onChanged={() => {
+          setTopic(undefined)
+          void loadList()
+        }}
+      />
       {error && (
         <div className="library-feedback is-error" role="alert">
           <span>{error}</span>
