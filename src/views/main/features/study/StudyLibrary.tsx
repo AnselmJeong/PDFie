@@ -23,6 +23,7 @@ import type {
   LibraryQuery,
 } from "../../../../shared/study/library"
 import { rpc } from "../../rpc"
+import { AnswerBlocks } from "./AnswerBlocks"
 import { CitationChip } from "./CitationChip"
 import { LessonPlayer } from "./LessonPlayer"
 import { EMPTY_FACETS, LibraryCatalog } from "./LibraryCatalog"
@@ -34,13 +35,6 @@ const date = (value: string) =>
   Date.parse(value) > 0
     ? new Date(value).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric", year: "numeric" })
     : "이전 기록"
-const labels = {
-  "document-claim": "논문에서 확인",
-  inference: "해석·추론",
-  background: "배경 설명",
-  illustration: "교육용 예시",
-  unknown: "근거 부족",
-}
 
 function StoredMessage({
   message,
@@ -62,18 +56,7 @@ function StoredMessage({
         <time>{date(message.createdAt)}</time>
       </header>
       {message.blocks.length ? (
-        message.blocks.map((block) => (
-          <div className="library-answer-block" key={`${block.kind}-${block.text}`}>
-            <span className={`claim-kind is-${block.kind}`}>{labels[block.kind]}</span>
-            <p>{block.text}</p>
-            <div className="answer-citations">
-              {block.evidenceIds.map((id) => {
-                const evidence = message.evidence.find((ref) => ref.id === id)
-                return evidence ? <CitationChip key={id} evidence={evidence} onReveal={onReveal} /> : null
-              })}
-            </div>
-          </div>
-        ))
+        <AnswerBlocks blocks={message.blocks} evidence={message.evidence} onReveal={onReveal} />
       ) : (
         <p>{message.text || message.error || "완료된 응답이 없습니다."}</p>
       )}

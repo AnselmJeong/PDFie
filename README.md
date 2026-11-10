@@ -6,6 +6,7 @@ PDFie is a native-WebKit macOS reader and study workspace for academic papers an
 
 - macOS 14 or newer
 - Bun
+- Current Safari/WebKit updates (Astryx menus and tooltips use CSS anchor positioning)
 
 ## Run and verify
 
@@ -66,13 +67,23 @@ Context is bounded and lexical, with a limited Korean–English term expansion. 
 
 OpenIntelligentUI integration ports its MIT-licensed design system and CSS → HTML → JavaScript rendering contract at upstream revision `f6e4388b26a64b9a0714943b08a1ce622b924eec`. PDFie uses its own Codex/Ollama provider and durable study store. Custom screens render after generation and validation, inside an opaque-origin iframe hosted by a separate RPC-disabled native webview. Network requests and external navigation are blocked; the host accepts only bounded control state, resizing and allowlisted source evidence. It does not install the upstream Next.js/Python server or require a separate Jev/API-key connection. See [ADR 007](docs/decisions/007-openintelligentui.md) for the integration boundary and limitations.
 
+## Reader
+
+The title bar holds navigation, the document title, search, capture, annotations,
+**Ask AI** (toggles the study panel, **⌘/**) and a **⋯** menu for document type,
+rotation, focus mode, export, settings and closing the document. A floating page
+dock on the canvas controls the view (one/two pages, actual size, fit page/width),
+zoom and page position. **F** toggles focus mode, which hides everything but the
+page and the dock.
+
 ## Selected-text actions
 
-Select a passage to Ask AI, Summarize, Copy, Read with system voices, add a note,
-or apply yellow/green/blue/pink highlighting or a red underline. `H` highlights
-and `U` underlines the current selection; `Escape` dismisses selection or stops
-reading. AI keeps the selected quote when the composer receives focus, and
-retains a summary draft if the model is not ready.
+Select a passage to open the selection card: highlight (`H`), underline (`U`),
+note, copy, five colors, and actions — AI에게 묻기, 요약하기, 쉽게 풀어 설명,
+용어·개념 정의 and 소리 내어 읽기. `Escape` dismisses selection or stops reading.
+AI keeps the selected quote when the composer receives focus, and retains a
+summary draft if the model is not ready. Answers cite pages inline, at the end of
+the sentence they support.
 
 The **주석** navigation tab lists saved passages, lets you change colors/edit notes,
 and jumps back to their pages. Annotation changes can be undone. Highlights and
@@ -86,5 +97,6 @@ notes persist per document without modifying the original PDF.
 - `docs/decisions/003-evidence-model.md`
 - `docs/decisions/004-provider-auth.md`
 - `docs/decisions/005-lesson-runtime.md`
+- `docs/decisions/008-astryx-design-system.md`
 - `docs/qa/phase-0-results.md`
 - `docs/qa/research-platform-spike.md`

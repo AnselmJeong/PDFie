@@ -35,6 +35,8 @@ const requiredFiles = [
   "Contents/Resources/app/views/main/settings.html",
   "Contents/Resources/app/views/main/index.js",
   "Contents/Resources/app/views/main/app.css",
+  "Contents/Resources/app/views/main/astryx.css",
+  "Contents/Resources/app/views/main/astryx-theme.css",
   "Contents/Resources/app/views/main/bootstrap.js",
   "Contents/Resources/app/views/main/assets/pdfium.wasm",
   "Contents/Resources/app/views/sandbox/index.html",

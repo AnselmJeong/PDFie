@@ -13,7 +13,7 @@ import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react"
 import type { EvidenceRef, StudyEvent, StudySection, StudySnapshot } from "../../../../shared/study/contracts"
 import { actionAnswers } from "../../../../shared/study/conversation"
 import { rpc } from "../../rpc"
-import { CitationChip } from "./CitationChip"
+import { AnswerBlocks } from "./AnswerBlocks"
 
 // Outline numbers ("2", "2.1"), subtree page ends and child counts for the tree.
 function sectionOutline(sections: StudySection[]) {
@@ -476,30 +476,7 @@ export function SectionList({
                 {summary ? (
                   <>
                     {summary.blocks.length ? (
-                      summary.blocks.map((block) => (
-                        <div className="answer-block" key={`${block.kind}-${block.text}`}>
-                          {block.kind !== "document-claim" && (
-                            <span className={`claim-kind is-${block.kind}`}>
-                              {block.kind === "inference"
-                                ? "해석·추론"
-                                : block.kind === "background"
-                                  ? "배경 설명"
-                                  : block.kind === "illustration"
-                                    ? "교육용 예시"
-                                    : "근거 부족"}
-                            </span>
-                          )}
-                          <p>{block.text}</p>
-                          <div className="answer-citations">
-                            {block.evidenceIds.map((id) => {
-                              const evidence = summary.evidence.find((ref) => ref.id === id)
-                              return evidence ? (
-                                <CitationChip key={id} evidence={evidence} onReveal={onReveal} />
-                              ) : null
-                            })}
-                          </div>
-                        </div>
-                      ))
+                      <AnswerBlocks blocks={summary.blocks} evidence={summary.evidence} onReveal={onReveal} />
                     ) : (
                       <p className="section-summary-text">{summary.text}</p>
                     )}

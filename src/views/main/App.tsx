@@ -1,4 +1,3 @@
-import { BookOpen, PanelRightOpen } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { ClassificationResult } from "../../shared/pdf/classification"
 import type {
@@ -34,6 +33,8 @@ export function App() {
   const [selection, setSelection] = useState<PdfSelection | null>(null)
   const [status, setStatus] = useState<ReaderStatus>(initialStatus)
   const [chatOpen, setChatOpen] = useState(true)
+  const [focusMode, setFocusMode] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
   const [aiRequest, setAiRequest] = useState<SelectionAiRequest | null>(null)
   const [classification, setClassification] = useState(initialClassification)
   const [typeSource, setTypeSource] = useState<"auto" | "user">("auto")
@@ -256,6 +257,7 @@ export function App() {
       }
       if (mod && event.code === "Slash") {
         event.preventDefault()
+        setFocusMode(false)
         setChatOpen((value) => !value)
       }
       if (mod && event.key.toLowerCase() === "l") {
@@ -266,6 +268,27 @@ export function App() {
     window.addEventListener("keydown", keydown)
     return () => window.removeEventListener("keydown", keydown)
   }, [openPdf])
+
+  useEffect(() => {
+    if (!notice) return
+    const timeout = window.setTimeout(() => setNotice(null), 3200)
+    return () => window.clearTimeout(timeout)
+  }, [notice])
+
+  const setDocumentType = useCallback(
+    (documentType: "article" | "book") => {
+      if (!source) return
+      setClassification((current) => ({ ...current, documentType, confidence: 1 }))
+      setTypeSource("user")
+      void rpc.request["pdf.saveState"]({
+        documentHash: source.documentHash,
+        documentType,
+        documentTypeSource: "user",
+      })
+    },
+    [source],
+  )
+  const toggleFocus = useCallback(() => setFocusMode((value) => !value), [])
 
   const libraryView = (
     <StudyLibrary
@@ -300,7 +323,7 @@ export function App() {
   return (
     <>
       {view === "library" && libraryView}
-      <div className="app-shell" hidden={view === "library"}>
+      <div className="app-shell" hidden={view === "library"} data-focus={focusMode || undefined}>
         <div className="reader-column">
           <EmbedPdfWorkspace
             key={source.documentId}
@@ -310,12 +333,14 @@ export function App() {
             captureRequest={captureRequest}
             onCapture={(asset) => {
               setCapture(asset)
+              setFocusMode(false)
               setChatOpen(true)
             }}
             onClose={() => void closePdf()}
             onSelectionChange={setSelection}
             onSelectionAiRequest={(request) => {
               setAiRequest(request)
+              setFocusMode(false)
               setChatOpen(true)
             }}
             onHighlightsChange={(highlights) =>
@@ -328,15 +353,38 @@ export function App() {
             }
             onStatusChange={setStatus}
             onClassificationChange={handleClassification}
+            chrome={{
+              aiOpen: chatOpen && !focusMode,
+              onToggleAi: () => {
+                setFocusMode(false)
+                setChatOpen((value) => (focusMode ? true : !value))
+              },
+              onOpenLibrary: () => setView("library"),
+              documentType: classification.documentType,
+              onDocumentTypeChange: setDocumentType,
+              onOpenSettings: () =>
+                void rpc.request["app.settings.open"]({ documentId: source.documentId }).catch(() =>
+                  setError("설정 창을 열지 못했습니다."),
+                ),
+              onExport: () =>
+                void rpc.request["study.export"]({ documentId: source.documentId })
+                  .then((result) => {
+                    if (result.saved) setNotice("학습 기록을 Markdown으로 저장했습니다.")
+                  })
+                  .catch((cause) =>
+                    setError(cause instanceof Error ? cause.message : "학습 기록을 내보내지 못했습니다."),
+                  ),
+              focusMode,
+              onToggleFocus: toggleFocus,
+            }}
           />
         </div>
-        <div hidden={!chatOpen} className="ai-sidebar-container">
+        <div hidden={!chatOpen || focusMode} className="ai-sidebar-container">
           <AiSidebar
             key={source.documentId}
-            visible={chatOpen}
+            visible={chatOpen && !focusMode}
             request={aiRequest}
             selection={selection}
-            activePage={status.page}
             source={source}
             capture={capture}
             onDismissCapture={dismissCapture}
@@ -345,68 +393,11 @@ export function App() {
             onClose={() => setChatOpen(false)}
           />
         </div>
-        {!chatOpen && (
-          <button
-            className="chat-reopen"
-            type="button"
-            onClick={() => setChatOpen(true)}
-            aria-label="AI sidebar 열기"
-          >
-            <PanelRightOpen size={16} />
-          </button>
+        {notice && (
+          <div className="toast-notice" role="status">
+            {notice}
+          </div>
         )}
-        <footer className="status-bar">
-          <button type="button" className="reader-library-button" onClick={() => setView("library")}>
-            <BookOpen size={14} /> 학습 서재 <kbd>⌘L</kbd>
-          </button>
-          <span>
-            {status.phase === "ready"
-              ? `Page ${status.page} of ${status.pageCount}`
-              : status.phase === "error"
-                ? "Viewer error"
-                : "Preparing PDF"}
-          </span>
-          <span>
-            {Math.round(status.zoom * 100)}% · {status.rotation * 90}°
-          </span>
-          <span className="status-type">
-            <span>문서 유형</span>
-            <button
-              type="button"
-              data-active={classification.documentType === "article"}
-              onClick={() => {
-                setClassification({ ...classification, documentType: "article", confidence: 1 })
-                setTypeSource("user")
-                void rpc.request["pdf.saveState"]({
-                  documentHash: source.documentHash,
-                  documentType: "article",
-                  documentTypeSource: "user",
-                })
-              }}
-            >
-              논문
-            </button>
-            <button
-              type="button"
-              data-active={classification.documentType === "book"}
-              onClick={() => {
-                setClassification({ ...classification, documentType: "book", confidence: 1 })
-                setTypeSource("user")
-                void rpc.request["pdf.saveState"]({
-                  documentHash: source.documentHash,
-                  documentType: "book",
-                  documentTypeSource: "user",
-                })
-              }}
-            >
-              책
-            </button>
-            {classification.documentType === "unknown" && <em>확인 필요</em>}
-          </span>
-          <span className="status-native">
-            <i /> Native WebKit
-          </span>
-        </footer>
         {(draggingFile || uploadingDrop) && <PdfDropOverlay uploading={uploadingDrop} />}
         {error && (
           <div className="toast-error" role="alert">
