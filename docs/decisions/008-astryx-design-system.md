@@ -1,7 +1,7 @@
 # ADR 008: Astryx design system and reader workspace redesign
 
 Date: 2026-11-10  
-Status: Phases 1–2 implemented (reader, study panel, selection card, tokens; library); later phases planned
+Status: Phases 1–3 implemented (reader, study panel, selection card, tokens; library; settings); later phases planned
 
 ## Context
 
@@ -48,6 +48,13 @@ Adopt [Astryx](https://github.com/meta/astryx) (`@astryxdesign/core` 0.7.11, MIT
 - The paper detail header uses Astryx buttons (원문 PDF 열기 primary) and a ⋯ menu for rename, archive, relink and delete; content tabs are a `TabList`.
 - The unused `EmptyLibrary` component and about 1,700 lines of superseded library CSS were removed.
 
+### Settings (phase 3)
+
+- A macOS-style preferences layout: a sidebar of pages (AI 연결, 화면) and grouped rows with text on the left and controls on the right.
+- The AI service is a pair of `SelectableCard`s. The ChatGPT account shows a `StatusDot`, sign-in actions, the allowance as a `Badge` and each usage window as a `ProgressBar` with its reset time. Ollama's API key uses a password `TextInput`; the model is a `Selector` whose options note image support.
+- New **appearance** setting (`system` · `light` · `dark`), stored with the existing settings and broadcast through `ai.settings.changed`; the root `<Theme mode>` applies it in every window. Previews are miniature windows drawn in each mode.
+- Reading size and panel width are `Slider`s that save when the drag ends.
+
 ## Consequences
 
 - Astryx is pre-1.0. Pin exact versions and use `astryx upgrade --apply` codemods when moving.
@@ -56,6 +63,5 @@ Adopt [Astryx](https://github.com/meta/astryx) (`@astryxdesign/core` 0.7.11, MIT
 
 ## Later phases
 
-1. Settings window on Astryx `Field`, `TextInput`, `Selector`, `Switch`, `Button`.
-2. Goal and section lists, the paper classification form, lesson player on Astryx primitives; replace remaining hand-rolled toasts with `ToastViewport`/`useToast`.
-3. Optionally a `defineTheme` extension of neutral (built with `astryx theme build`) once PDFie needs its own accent or component overrides.
+1. Goal and section lists, the paper classification form, lesson player on Astryx primitives; replace remaining hand-rolled toasts with `ToastViewport`/`useToast`.
+2. Optionally a `defineTheme` extension of neutral (built with `astryx theme build`) once PDFie needs its own accent or component overrides.

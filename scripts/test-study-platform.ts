@@ -169,8 +169,14 @@ try {
   assert.equal(settings.status().provider, "ollama-cloud")
   assert.equal(settings.status().selectedModel, "legacy-model")
   assert.equal(settings.status().sidebarWidth, 422)
+  assert.equal(settings.status().appearance, "system")
   await settings.update({ selectedModel: "fake-model" })
   assert.equal(await readFile(join(directory, "settings.json.pre-study-v1.bak"), "utf8"), legacy)
+  await settings.update({ appearance: "dark" })
+  await assert.rejects(settings.update({ appearance: "sepia" as "dark" }))
+  const reopened = await AiSettingsRepository.open(join(directory, "settings.json"), join(directory, "key"))
+  assert.equal(reopened.status().appearance, "dark")
+  assert.equal(reopened.status().selectedModel, "fake-model")
   let mode = "chat",
     payloads: GenerationInput[] = []
   const fake: StudyProvider = {

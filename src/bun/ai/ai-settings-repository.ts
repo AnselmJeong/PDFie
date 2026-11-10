@@ -4,6 +4,9 @@ import { chmod, copyFile, mkdir, readFile, rename, writeFile } from "node:fs/pro
 import { dirname } from "node:path"
 import type { ProviderId } from "../../shared/study/contracts"
 
+export type AppearanceMode = "system" | "light" | "dark"
+const APPEARANCES: AppearanceMode[] = ["system", "light", "dark"]
+
 interface EncryptedSecret {
   iv: string
   tag: string
@@ -17,6 +20,7 @@ interface StoredAiSettings {
   selectedModel: string
   sidebarWidth: number
   sidebarFontSize: number
+  appearance: AppearanceMode
 }
 
 export interface AiSettingsStatus {
@@ -26,6 +30,7 @@ export interface AiSettingsStatus {
   selectedModel: string
   sidebarWidth: number
   sidebarFontSize: number
+  appearance: AppearanceMode
 }
 
 const DEFAULTS: StoredAiSettings = {
@@ -34,6 +39,7 @@ const DEFAULTS: StoredAiSettings = {
   selectedModel: "",
   sidebarWidth: 390,
   sidebarFontSize: 14,
+  appearance: "system",
 }
 
 export class AiSettingsRepository {
@@ -57,6 +63,9 @@ export class AiSettingsRepository {
         ...stored,
         provider: stored.provider === "codex" ? "codex" : "ollama-cloud",
         providerModels: stored.providerModels ?? {},
+        appearance: APPEARANCES.includes(stored.appearance as AppearanceMode)
+          ? (stored.appearance as AppearanceMode)
+          : "system",
       }
     } catch (cause) {
       repository.#loadFailed = (cause as NodeJS.ErrnoException).code !== "ENOENT"
@@ -72,6 +81,7 @@ export class AiSettingsRepository {
       selectedModel: this.#settings.selectedModel,
       sidebarWidth: this.#settings.sidebarWidth,
       sidebarFontSize: this.#settings.sidebarFontSize,
+      appearance: this.#settings.appearance,
     }
   }
 
@@ -95,6 +105,7 @@ export class AiSettingsRepository {
     selectedModel?: string
     sidebarWidth?: number
     sidebarFontSize?: number
+    appearance?: AppearanceMode
   }): Promise<AiSettingsStatus> {
     if (this.#loadFailed)
       throw new Error("기존 AI 설정 파일을 읽지 못했습니다. 원본을 보존했으므로 복구 후 다시 시도하세요.")
@@ -122,6 +133,10 @@ export class AiSettingsRepository {
     }
     if (Number.isFinite(patch.sidebarFontSize)) {
       this.#settings.sidebarFontSize = Math.min(19, Math.max(12, Math.round(patch.sidebarFontSize ?? 14)))
+    }
+    if (patch.appearance !== undefined) {
+      if (!APPEARANCES.includes(patch.appearance)) throw new Error("지원하지 않는 화면 모드입니다.")
+      this.#settings.appearance = patch.appearance
     }
     await this.#persist()
     return this.status()

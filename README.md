@@ -57,7 +57,7 @@ Batch import skips hidden entries and symbolic links, and accepts up to 10,000 P
 
 ## AI connections and storage
 
-Open the separate **설정** window with the settings icon or **⌘,**. AI connection, model and appearance are organized there.
+Open the separate **설정** window with the settings icon or **⌘,**. Its **AI 연결** page chooses the service (ChatGPT 구독 or Ollama Cloud), shows sign-in state and usage limits or the API key, and selects the model. **화면** sets the appearance (시스템 설정, 라이트, 다크 — applied to every window) and the study panel's reading size and width.
 
 **Ollama Cloud** uses the existing fixed endpoint `https://ollama.com/v1`. Configure its API key in AI settings or the Bun process's `OLLAMA_API_KEY` environment. Keys entered in settings use the existing local AES-GCM secret file; this is not macOS Keychain storage. Old settings are backed up before their first study-settings migration. Model choices are remembered separately per provider.
 
