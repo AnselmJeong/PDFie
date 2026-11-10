@@ -26,6 +26,8 @@ The Astryx theme lives in `src/views/main/theme/pdfie.source.ts`; run `bun run t
 
 Stable artifacts are written to `artifacts/`. Because this workspace is on an external volume, copy the stable `.app` to `/Applications` or another system-volume location before first launch; Electrobun's self-extractor cannot rename its staging bundle across volumes.
 
+**Releases.** `.github/workflows/release.yml` builds, tests and verifies the app on a macOS (Apple Silicon) runner. Bump `package.json`, add `docs/releases/v<version>.md`, then push a matching `v<version>` tag: the workflow publishes a GitHub release with the DMG, the compressed app bundle and `update.json`. Running the workflow manually only uploads them as workflow artifacts. Builds are not signed or notarized.
+
 ## Study workspace
 
 Open a PDF and use the four tabs in the right sidebar:
