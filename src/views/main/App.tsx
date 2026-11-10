@@ -1,3 +1,4 @@
+import { useToast } from "@astryxdesign/core/Toast"
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { ClassificationResult } from "../../shared/pdf/classification"
 import type {
@@ -269,11 +270,18 @@ export function App() {
     return () => window.removeEventListener("keydown", keydown)
   }, [openPdf])
 
+  const toast = useToast()
+  // Messages surface as toasts; errors persist until dismissed.
+  useEffect(() => {
+    if (!error) return
+    toast({ body: error, type: "error", uniqueID: `error:${error}` })
+    setError(null)
+  }, [error, toast])
   useEffect(() => {
     if (!notice) return
-    const timeout = window.setTimeout(() => setNotice(null), 3200)
-    return () => window.clearTimeout(timeout)
-  }, [notice])
+    toast({ body: notice, uniqueID: `notice:${notice}` })
+    setNotice(null)
+  }, [notice, toast])
 
   const setDocumentType = useCallback(
     (documentType: "article" | "book") => {
@@ -311,11 +319,6 @@ export function App() {
       <>
         {libraryView}
         {(draggingFile || uploadingDrop) && <PdfDropOverlay uploading={uploadingDrop} />}
-        {error && (
-          <div className="toast-error" role="alert">
-            {error}
-          </div>
-        )}
       </>
     )
   }
@@ -393,17 +396,7 @@ export function App() {
             onClose={() => setChatOpen(false)}
           />
         </div>
-        {notice && (
-          <div className="toast-notice" role="status">
-            {notice}
-          </div>
-        )}
         {(draggingFile || uploadingDrop) && <PdfDropOverlay uploading={uploadingDrop} />}
-        {error && (
-          <div className="toast-error" role="alert">
-            {error}
-          </div>
-        )}
       </div>
     </>
   )

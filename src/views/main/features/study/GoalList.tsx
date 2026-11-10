@@ -1,3 +1,7 @@
+import { Button } from "@astryxdesign/core/Button"
+import { DropdownMenu, DropdownMenuDivider, DropdownMenuItem } from "@astryxdesign/core/DropdownMenu"
+import { IconButton } from "@astryxdesign/core/IconButton"
+import { ProgressBar } from "@astryxdesign/core/ProgressBar"
 import {
   ArrowDown,
   ArrowUp,
@@ -5,8 +9,8 @@ import {
   CheckCircle2,
   ChevronDown,
   Circle,
+  Ellipsis,
   FileText,
-  MoreHorizontal,
   Pencil,
   Plus,
   Sparkles,
@@ -51,11 +55,9 @@ export function GoalList({
 }) {
   const goals = snapshot?.goals ?? []
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [menuId, setMenuId] = useState<string | null>(null)
   const [editor, setEditor] = useState<{ id: string; text: string } | null>(null)
   const [draft, setDraft] = useState("")
   const [saving, setSaving] = useState(false)
-  const menuTrigger = useRef<HTMLButtonElement | null>(null)
   const editorInput = useRef<HTMLTextAreaElement>(null)
   const mounted = useRef(true)
 
@@ -66,30 +68,8 @@ export function GoalList({
     }
   }, [])
   useEffect(() => {
-    if (hidden) setMenuId(null)
-    else if (editor?.id) editorInput.current?.focus()
+    if (!hidden && editor?.id) editorInput.current?.focus()
   }, [hidden, editor?.id])
-  useEffect(() => {
-    if (!menuId || hidden) return
-    const dismiss = (event: PointerEvent | FocusEvent) => {
-      if (event.target instanceof Element && !event.target.closest(".goal-more")) setMenuId(null)
-    }
-    const dismissWithEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return
-      event.preventDefault()
-      event.stopPropagation()
-      setMenuId(null)
-      menuTrigger.current?.focus()
-    }
-    document.addEventListener("pointerdown", dismiss)
-    document.addEventListener("focusin", dismiss)
-    document.addEventListener("keydown", dismissWithEscape, true)
-    return () => {
-      document.removeEventListener("pointerdown", dismiss)
-      document.removeEventListener("focusin", dismiss)
-      document.removeEventListener("keydown", dismissWithEscape, true)
-    }
-  }, [menuId, hidden])
 
   const save = async (goal: StudyGoal, complete: () => void) => {
     setSaving(true)
@@ -108,41 +88,43 @@ export function GoalList({
     if (!currentId || !targetId) return
     ids[index] = targetId
     ids[target] = currentId
-    setMenuId(null)
     onReorder(ids)
   }
 
   return (
     <section className="goals-panel" hidden={hidden}>
-      <div className="goal-list-heading">
-        <div>
-          <span className="study-eyebrow">질문에서 이해로</span>
+      <header className="goal-list-heading">
+        <div className="goal-list-title">
           <h2>학습 목표</h2>
+          <Button
+            size="sm"
+            variant={goals.length ? "ghost" : "primary"}
+            label={goals.length ? "다시 제안" : "원문으로 학습 목표 만들기"}
+            tooltip={!ready ? unavailableReason : "편집한 목표와 점검 기록은 유지됩니다."}
+            icon={<Sparkles size={13} aria-hidden="true" />}
+            isDisabled={!ready}
+            onClick={onRegenerate}
+          />
         </div>
-        {!!goals.length && <span className="goal-count">{goals.length}개 목표</span>}
-      </div>
-      <div className="goal-list-progress">
-        <span>
-          탐색 {goals.filter((goal) => goal.explored).length}/{goals.length}
-        </span>
-        <span>
-          <CheckCircle2 size={12} aria-hidden="true" />
-          점검 통과 {goals.filter((goal) => goal.checked).length}/{goals.length}
-        </span>
-      </div>
-      <div className="goal-list-intro">
-        <p className="study-muted">질문을 펼쳐 선수 지식과 이해 점검을 확인하세요.</p>
-        <button
-          type="button"
-          className={goals.length ? "goal-quiet-action" : "study-primary"}
-          disabled={!ready}
-          title={!ready ? unavailableReason : "편집한 목표와 점검 기록은 유지됩니다."}
-          onClick={onRegenerate}
-        >
-          <Sparkles size={13} aria-hidden="true" />
-          {goals.length ? "목표 다시 제안" : "원문으로 학습 목표 만들기"}
-        </button>
-      </div>
+        {!!goals.length && (
+          <div className="goal-list-progress">
+            <ProgressBar
+              label="이해 점검 통과"
+              isLabelHidden
+              variant="success"
+              max={goals.length}
+              value={goals.filter((goal) => goal.checked).length}
+            />
+            <span>
+              <CheckCircle2 size={12} aria-hidden="true" />
+              점검 통과 {goals.filter((goal) => goal.checked).length}/{goals.length}
+            </span>
+            <span>
+              탐색 {goals.filter((goal) => goal.explored).length}/{goals.length}
+            </span>
+          </div>
+        )}
+      </header>
       {!goals.length && (
         <p className="study-empty-note">
           {ready
@@ -163,13 +145,7 @@ export function GoalList({
           const pages = [...new Set(refs.map((ref) => ref.pageIndex + 1))].sort((a, b) => a - b)
           const state = goal.checked ? "checked" : goal.explored ? "explored" : "suggested"
           return (
-            <li
-              className="goal-row"
-              key={goal.id}
-              data-state={state}
-              data-expanded={expanded}
-              data-menu-open={menuId === goal.id}
-            >
+            <li className="goal-row" key={goal.id} data-state={state} data-expanded={expanded}>
               <div className="goal-row-heading">
                 <span className="goal-number" aria-hidden="true">
                   {String(index + 1).padStart(2, "0")}
@@ -207,90 +183,70 @@ export function GoalList({
                   {goal.userEdited && <span className="goal-edited"> · 편집함</span>}
                 </span>
                 <div className="goal-row-actions">
-                  <button
-                    type="button"
-                    className="goal-quiet-action"
-                    disabled={!ready && !explanationSaved}
-                    title={!ready && !explanationSaved ? unavailableReason : undefined}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    label="설명"
+                    tooltip={!ready && !explanationSaved ? unavailableReason : "원문 근거와 함께 설명 보기"}
+                    icon={<FileText size={13} aria-hidden="true" />}
+                    isDisabled={!ready && !explanationSaved}
                     onClick={() => onExplain(goal)}
-                  >
-                    <FileText size={12} aria-hidden="true" />
-                    설명 확인
-                  </button>
-                  <button
-                    type="button"
-                    className="goal-study-action"
-                    disabled={!ready && !lessonSaved}
-                    title={!ready && !lessonSaved ? unavailableReason : undefined}
+                  />
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    label={lessonSaved ? "학습 이어보기" : "함께 공부하기"}
+                    tooltip={!ready && !lessonSaved ? unavailableReason : undefined}
+                    icon={<BookOpen size={13} aria-hidden="true" />}
+                    isDisabled={!ready && !lessonSaved}
                     onClick={() => onStudy(goal)}
-                  >
-                    <BookOpen size={13} aria-hidden="true" />
-                    {lessonSaved ? "학습 이어보기" : "함께 공부하기"}
-                  </button>
-                  <div className="goal-more">
-                    <button
-                      type="button"
-                      className="goal-more-trigger"
-                      aria-label={`${goal.question} 더 보기`}
-                      aria-expanded={menuId === goal.id}
-                      aria-controls={`goal-options-${goal.id}`}
-                      onClick={(event) => {
-                        menuTrigger.current = event.currentTarget
-                        setMenuId(menuId === goal.id ? null : goal.id)
-                      }}
-                    >
-                      <MoreHorizontal size={17} aria-hidden="true" />
-                    </button>
-                    {menuId === goal.id && (
-                      <fieldset
-                        className="goal-more-popover"
-                        id={`goal-options-${goal.id}`}
-                        aria-label="학습 목표 편집"
-                      >
-                        <button
-                          type="button"
-                          disabled={busy || saving}
-                          onClick={() => {
-                            setEditor({ id: goal.id, text: goal.question })
-                            setExpandedId(goal.id)
-                            setMenuId(null)
-                          }}
-                        >
-                          <Pencil size={13} aria-hidden="true" />
-                          질문 편집
-                        </button>
-                        <button
-                          type="button"
-                          disabled={index === 0 || busy || saving}
-                          onClick={() => move(index, -1)}
-                        >
-                          <ArrowUp size={13} aria-hidden="true" />
-                          위로 이동
-                        </button>
-                        <button
-                          type="button"
-                          disabled={index === goals.length - 1 || busy || saving}
-                          onClick={() => move(index, 1)}
-                        >
-                          <ArrowDown size={13} aria-hidden="true" />
-                          아래로 이동
-                        </button>
-                        <button
-                          type="button"
-                          className="goal-delete-action"
-                          disabled={busy || saving}
-                          onClick={() => {
-                            setMenuId(null)
-                            if (editing) setEditor(null)
-                            onDelete(goal.id)
-                          }}
-                        >
-                          <Trash2 size={13} aria-hidden="true" />
-                          목표 삭제
-                        </button>
-                      </fieldset>
+                  />
+                  <DropdownMenu
+                    alignment="end"
+                    menuWidth={180}
+                    renderTrigger={(trigger) => (
+                      <IconButton
+                        {...trigger}
+                        size="sm"
+                        variant="ghost"
+                        label={`${goal.question} 더 보기`}
+                        icon={<Ellipsis size={15} aria-hidden="true" />}
+                      />
                     )}
-                  </div>
+                  >
+                    <DropdownMenuItem
+                      label="질문 편집"
+                      icon={Pencil}
+                      isDisabled={busy || saving}
+                      onClick={() => {
+                        setEditor({ id: goal.id, text: goal.question })
+                        setExpandedId(goal.id)
+                      }}
+                    />
+                    <DropdownMenuItem
+                      label="위로 이동"
+                      icon={ArrowUp}
+                      isDisabled={index === 0 || busy || saving}
+                      onClick={() => move(index, -1)}
+                    />
+                    <DropdownMenuItem
+                      label="아래로 이동"
+                      icon={ArrowDown}
+                      isDisabled={index === goals.length - 1 || busy || saving}
+                      onClick={() => move(index, 1)}
+                    />
+                    <DropdownMenuDivider />
+                    <DropdownMenuItem
+                      label="목표 삭제"
+                      icon={Trash2}
+                      variant="destructive"
+                      isDisabled={busy || saving}
+                      onClick={() => {
+                        if (editing) setEditor(null)
+                        onDelete(goal.id)
+                      }}
+                    />
+                  </DropdownMenu>
                 </div>
               </div>
               <section
@@ -317,13 +273,22 @@ export function GoalList({
                         onChange={(event) => setEditor({ ...editor, text: event.target.value })}
                       />
                     </label>
-                    <div className="study-actions">
-                      <button type="submit" disabled={!editor.text.trim() || saving}>
-                        {saving ? "저장 중…" : "저장"}
-                      </button>
-                      <button type="button" disabled={saving} onClick={() => setEditor(null)}>
-                        취소
-                      </button>
+                    <div className="goal-editor-actions">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        label="취소"
+                        isDisabled={saving}
+                        onClick={() => setEditor(null)}
+                      />
+                      <Button
+                        type="submit"
+                        size="sm"
+                        variant="primary"
+                        label="저장"
+                        isLoading={saving}
+                        isDisabled={!editor.text.trim()}
+                      />
                     </div>
                   </form>
                 )}
@@ -383,13 +348,15 @@ export function GoalList({
           onChange={(event) => setDraft(event.target.value)}
           placeholder="내가 탐구할 질문 추가"
         />
-        <button
+        <IconButton
           type="submit"
-          aria-label="학습 목표 추가"
-          disabled={!draft.trim() || !snapshot?.index.blockCount || saving}
-        >
-          <Plus size={15} aria-hidden="true" />
-        </button>
+          size="sm"
+          variant="ghost"
+          label="학습 목표 추가"
+          tooltip="학습 목표 추가"
+          icon={<Plus size={15} aria-hidden="true" />}
+          isDisabled={!draft.trim() || !snapshot?.index.blockCount || saving}
+        />
       </form>
     </section>
   )

@@ -1,3 +1,6 @@
+import { Button } from "@astryxdesign/core/Button"
+import { IconButton } from "@astryxdesign/core/IconButton"
+import { ArrowLeft, ArrowRight, Check, Maximize2, Minimize2 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import type { EvidenceRef, LessonSpec, StudySnapshot } from "../../../../shared/study/contracts"
@@ -150,9 +153,14 @@ export function LessonPlayer({
         <span className="study-eyebrow">
           직접 탐구하기 · {index + 1}/{lesson.steps.length}
         </span>
-        <button type="button" onClick={() => setExpanded(!expanded)}>
-          {expanded ? "작게 보기" : "넓게 보기"}
-        </button>
+        <IconButton
+          size="sm"
+          variant="ghost"
+          label={expanded ? "작게 보기" : "넓게 보기"}
+          tooltip={expanded ? "작게 보기 (Esc)" : "넓게 보기"}
+          icon={expanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+          onClick={() => setExpanded(!expanded)}
+        />
       </header>
       <h2>{lesson.title}</h2>
       {saved?.completedAt && (
@@ -290,17 +298,22 @@ export function LessonPlayer({
               </label>
             ))}
           </fieldset>
-          <div className="study-actions">
-            <button
-              type="button"
-              disabled={selectedChoice === null || pending}
+          <div className="lesson-quiz-actions">
+            <Button
+              size="sm"
+              variant="primary"
+              label="답변 확인"
+              isDisabled={selectedChoice === null || pending}
               onClick={() => void submit(false)}
-            >
-              답변 확인
-            </button>
-            <button type="button" disabled={pending} onClick={() => void submit(true)}>
-              정답 열어보기
-            </button>
+            />
+            <Button
+              size="sm"
+              variant="ghost"
+              label="정답 열어보기"
+              tooltip="열람한 정답은 스스로 통과한 점검으로 기록하지 않습니다."
+              isDisabled={pending}
+              onClick={() => void submit(true)}
+            />
           </div>
           {last && (
             <div className="quiz-feedback" role="status">
@@ -339,22 +352,33 @@ export function LessonPlayer({
         })}
       </div>
       <nav className="lesson-navigation" aria-label="학습 단계">
-        <button type="button" disabled={index === 0 || pending} onClick={() => void save(index - 1)}>
-          이전
-        </button>
+        <Button
+          size="sm"
+          variant="secondary"
+          label="이전"
+          icon={<ArrowLeft size={14} />}
+          isDisabled={index === 0 || pending}
+          onClick={() => void save(index - 1)}
+        />
         <span>{lesson.dataKind === "illustrative" ? "교육용 예시 포함" : "원문에 근거한 학습"}</span>
         {index < lesson.steps.length - 1 ? (
-          <button type="button" disabled={pending} onClick={() => void save(index + 1)}>
-            다음
-          </button>
+          <Button
+            size="sm"
+            variant="primary"
+            label="다음"
+            endContent={<ArrowRight size={14} />}
+            isDisabled={pending}
+            onClick={() => void save(index + 1)}
+          />
         ) : (
-          <button
-            type="button"
-            disabled={pending || !!saved?.completedAt}
+          <Button
+            size="sm"
+            variant="primary"
+            label={saved?.completedAt ? "수업 마침" : "수업 마치기"}
+            icon={<Check size={14} />}
+            isDisabled={pending || !!saved?.completedAt}
             onClick={() => void save(index, parameters, true)}
-          >
-            {saved?.completedAt ? "수업 마침" : "수업 마치기"}
-          </button>
+          />
         )}
       </nav>
     </section>

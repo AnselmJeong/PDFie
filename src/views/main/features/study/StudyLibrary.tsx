@@ -6,6 +6,7 @@ import { IconButton } from "@astryxdesign/core/IconButton"
 import { Kbd } from "@astryxdesign/core/Kbd"
 import { Tab, TabList } from "@astryxdesign/core/TabList"
 import { TextInput } from "@astryxdesign/core/TextInput"
+import { useToast } from "@astryxdesign/core/Toast"
 import {
   Archive,
   ArchiveRestore,
@@ -162,6 +163,7 @@ export function StudyLibrary({
   const [rename, setRename] = useState<string | null>(null)
   const [topicsOpen, setTopicsOpen] = useState(false)
   const intake = useLibraryImport()
+  const toast = useToast()
   const listSequence = useRef(0)
   const detailSequence = useRef(0)
   const selectedRef = useRef(selected)
@@ -174,6 +176,23 @@ export function StudyLibrary({
     (cause: unknown) => setError(cause instanceof Error ? cause.message : "학습 자료를 불러오지 못했습니다."),
     [],
   )
+  // Feedback surfaces as toasts; an error offers to reload the current view.
+  const refreshRef = useRef<() => void>(() => undefined)
+  useEffect(() => {
+    if (!error) return
+    toast({
+      body: error,
+      type: "error",
+      uniqueID: `library-error:${error}`,
+      endContent: <Button size="sm" variant="ghost" label="다시 확인" onClick={() => refreshRef.current()} />,
+    })
+    setError(null)
+  }, [error, toast])
+  useEffect(() => {
+    if (!notice) return
+    toast({ body: notice, uniqueID: `library-notice:${notice}` })
+    setNotice("")
+  }, [notice, toast])
   const loadList = useCallback(
     async (more = false) => {
       const sequence = ++listSequence.current
@@ -289,6 +308,7 @@ export function StudyLibrary({
     if (selected) void loadDetail(selected)
     void loadList()
   }
+  refreshRef.current = refresh
   const update = (patch: LibraryPatch) =>
     void run(async () => {
       if (!selected) return
@@ -628,6 +648,7 @@ export function StudyLibrary({
                 onError={setError}
               />
               <TabList
+                role="tablist"
                 className="library-content-tabs"
                 aria-label="저장된 학습 내용"
                 hasDivider
@@ -637,11 +658,28 @@ export function StudyLibrary({
                   setEvidence(null)
                 }}
               >
-                <Tab value="lessons" label={`수업 ${snapshot.lessons.length}`} />
-                <Tab value="goals" label={`학습 목표 ${snapshot.goals.length}`} />
-                <Tab value="notes" label={`요약·설명·대화 ${explanations.length + conversations.length}`} />
+                <Tab
+                  value="lessons"
+                  label={`수업 ${snapshot.lessons.length}`}
+                  panelId="library-detail-panel"
+                />
+                <Tab
+                  value="goals"
+                  label={`학습 목표 ${snapshot.goals.length}`}
+                  panelId="library-detail-panel"
+                />
+                <Tab
+                  value="notes"
+                  label={`요약·설명·대화 ${explanations.length + conversations.length}`}
+                  panelId="library-detail-panel"
+                />
               </TabList>
-              <div className="library-detail-scroll" ref={detailScroll}>
+              <div
+                className="library-detail-scroll"
+                id="library-detail-panel"
+                role="tabpanel"
+                ref={detailScroll}
+              >
                 {tab === "lessons" &&
                   (snapshot.lessons.length ? (
                     <>
@@ -843,31 +881,6 @@ export function StudyLibrary({
           void loadList()
         }}
       />
-      {error && (
-        <div className="library-feedback is-error" role="alert">
-          <span>{error}</span>
-          <button
-            type="button"
-            onClick={() => {
-              setError(null)
-              refresh()
-            }}
-          >
-            다시 확인
-          </button>
-          <button type="button" aria-label="오류 닫기" onClick={() => setError(null)}>
-            <X size={14} />
-          </button>
-        </div>
-      )}
-      {notice && (
-        <div className="library-feedback" role="status">
-          <span>{notice}</span>
-          <button type="button" aria-label="알림 닫기" onClick={() => setNotice("")}>
-            <X size={14} />
-          </button>
-        </div>
-      )}
     </main>
   )
 }

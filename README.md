@@ -87,8 +87,8 @@ AI keeps the selected quote when the composer receives focus, and retains a
 summary draft if the model is not ready. Answers cite pages inline, at the end of
 the sentence they support.
 
-The **주석** navigation tab lists saved passages, lets you change colors/edit notes,
-and jumps back to their pages. Annotation changes can be undone. Highlights and
+The **주석** navigation tab lists saved passages as cards tinted by their color;
+change the color with the swatches, edit the note inline, or jump back to the page. Annotation changes can be undone. Highlights and
 notes persist per document without modifying the original PDF.
 
 ## Architecture records

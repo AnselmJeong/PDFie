@@ -1,7 +1,7 @@
 # ADR 008: Astryx design system and reader workspace redesign
 
 Date: 2026-11-10  
-Status: Phases 1–3 implemented (reader, study panel, selection card, tokens; library; settings); later phases planned
+Status: Implemented (reader, study panel, selection card and tokens; library; settings; study lists, lessons and feedback)
 
 ## Context
 
@@ -55,13 +55,24 @@ Adopt [Astryx](https://github.com/meta/astryx) (`@astryxdesign/core` 0.7.11, MIT
 - New **appearance** setting (`system` · `light` · `dark`), stored with the existing settings and broadcast through `ai.settings.changed`; the root `<Theme mode>` applies it in every window. Previews are miniature windows drawn in each mode.
 - Reading size and panel width are `Slider`s that save when the drag ends.
 
+### Study lists, lessons and feedback (phase 4)
+
+- Goal and section lists open with a compact header (title, 다시 제안, a passed-check `ProgressBar`). Row actions are Astryx buttons (설명, 함께 공부하기) and a `DropdownMenu` for edit, reorder, split, merge and delete, replacing the hand-built popovers and their outside-click handling. Hover-revealed actions stay visible while a row's menu is open.
+- Lesson player controls (expand, answer check, reveal, previous/next/finish), the result view's back and regenerate actions, the generation stop button and the paper classification form use Astryx buttons.
+- Errors and notices in the reader and library are Astryx toasts (`LayerProvider` + `useToast`, bottom end); errors persist until dismissed and the library's offer a reload.
+- Reader notices (evidence return, highlight undo, read-aloud, viewer errors) float as pills over the canvas instead of pushing the page down.
+- The navigation rail's tabs are a `SegmentedControl`; the annotations rail shows one card per passage tinted by its highlight color, with inline swatches, page link, delete and an inline note.
+- Sidebar and library content tabs use the WAI-ARIA tabs pattern (`role="tablist"`, `panelId`).
+- Generic descendant rules (`.lesson-player button`, `.study-actions button`, …) now exclude Astryx components, so app-layer CSS never restyles them.
+
 ## Consequences
 
 - Astryx is pre-1.0. Pin exact versions and use `astryx upgrade --apply` codemods when moving.
 - Menus and tooltips use the Popover API and CSS anchor positioning (Astryx "Tier 1": Safari 26+). On macOS 14/15 this requires current Safari/WebKit updates; older WebKit opens and dismisses layers correctly but may not place them next to their trigger. The selected-text card is positioned by PDFie and unaffected.
 - Component docs are available offline: `bunx astryx component <Name>`, `bunx astryx docs <topic>`.
 
-## Later phases
+## Possible follow-ups
 
-1. Goal and section lists, the paper classification form, lesson player on Astryx primitives; replace remaining hand-rolled toasts with `ToastViewport`/`useToast`.
-2. Optionally a `defineTheme` extension of neutral (built with `astryx theme build`) once PDFie needs its own accent or component overrides.
+- A `defineTheme` extension of neutral (built with `astryx theme build`) if PDFie needs its own accent or component overrides.
+- Native title bar integration (`titleBarStyle: "hiddenInset"` with drag regions) so the reader's title bar becomes the window's, once it can be checked on macOS.
+- Interactive lesson widgets (`IntelligentLesson`) and the topic/collection inputs of the classification form still use styled native controls.

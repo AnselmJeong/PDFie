@@ -292,8 +292,22 @@ describe("saved goal explanation reuse", () => {
         onReveal: () => {},
       }),
     )
-    expect(html).toMatch(/<button[^>]*class="goal-quiet-action">[\s\S]*?설명 확인<\/button>/)
-    expect(html).toMatch(/<button[^>]*class="goal-study-action">[\s\S]*?학습 이어보기<\/button>/)
+    // The opening tag of the button whose visible label is `label`.
+    const buttonFor = (label: string) => {
+      const end = html.indexOf(`>${label}</span>`)
+      return end < 0
+        ? ""
+        : html.slice(
+            html.lastIndexOf("<button", end),
+            html.indexOf(">", html.lastIndexOf("<button", end)) + 1,
+          )
+    }
+    for (const label of ["설명", "학습 이어보기"]) {
+      const tag = buttonFor(label)
+      expect(tag).toContain("<button")
+      expect(tag).not.toMatch(/\sdisabled|aria-disabled="true"/)
+    }
+    expect(buttonFor("다시 제안")).toContain('aria-disabled="true"')
     expect(html).toContain("학습 준비됨")
   })
 

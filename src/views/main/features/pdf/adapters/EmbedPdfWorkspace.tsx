@@ -10,6 +10,7 @@ import {
 } from "@astryxdesign/core/DropdownMenu"
 import { IconButton as AxIconButton } from "@astryxdesign/core/IconButton"
 import { Kbd } from "@astryxdesign/core/Kbd"
+import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl"
 import type { PluginRegistry } from "@embedpdf/core"
 import { EmbedPDF, useDocumentState } from "@embedpdf/core/react"
 import { usePdfiumEngine } from "@embedpdf/engines/react"
@@ -901,75 +902,93 @@ function ReaderChrome({
         </header>
       )}
 
-      {returnPage !== null && (
-        <div className="reader-action-status evidence-navigation" role="status">
-          <span>근거 확인 · PDF p. {(evidence?.pageIndex ?? 0) + 1}</span>
-          <button
-            type="button"
-            onClick={() => {
-              scroll?.scrollToPage({ pageNumber: returnPage, behavior: "instant" })
-              setReturnPage(null)
-              setEvidence(null)
-            }}
-          >
-            <Undo2 size={13} /> 이전 읽던 페이지로
-          </button>
-          <button type="button" onClick={() => setEvidence(null)}>
-            강조 지우기
-          </button>
-        </div>
-      )}
-
-      {previousHighlights && (
-        <div className="reader-action-status" role="status">
-          하이라이트·주석 변경됨
-          <button
-            type="button"
-            onClick={() => {
-              setHighlights(previousHighlights)
-              onHighlightsChange(previousHighlights)
-              setPreviousHighlights(null)
-            }}
-          >
-            되돌리기
-          </button>
-        </div>
-      )}
-      {actionError && (
-        <div className="reader-action-status" role="alert">
-          {actionError}
-          <button type="button" onClick={() => setActionError(null)}>
-            닫기
-          </button>
-        </div>
-      )}
-      {speech.reading && (
-        <div className="reader-action-status" role="status">
-          선택한 구절 읽는 중
-          <button type="button" onClick={speech.stop}>
-            <Square size={12} /> 읽기 중지
-          </button>
+      {(returnPage !== null || previousHighlights || actionError || speech.reading) && (
+        <div className="reader-notices">
+          {returnPage !== null && (
+            <div className="reader-notice" role="status">
+              <span>근거 확인 · p. {(evidence?.pageIndex ?? 0) + 1}</span>
+              <Button
+                size="sm"
+                variant="ghost"
+                label="읽던 페이지로"
+                icon={<Undo2 size={13} />}
+                onClick={() => {
+                  scroll?.scrollToPage({ pageNumber: returnPage, behavior: "instant" })
+                  setReturnPage(null)
+                  setEvidence(null)
+                }}
+              />
+              <Button size="sm" variant="ghost" label="강조 지우기" onClick={() => setEvidence(null)} />
+            </div>
+          )}
+          {previousHighlights && (
+            <div className="reader-notice" role="status">
+              <span>하이라이트·주석을 바꿨습니다</span>
+              <Button
+                size="sm"
+                variant="ghost"
+                label="되돌리기"
+                icon={<Undo2 size={13} />}
+                onClick={() => {
+                  setHighlights(previousHighlights)
+                  onHighlightsChange(previousHighlights)
+                  setPreviousHighlights(null)
+                }}
+              />
+              <AxIconButton
+                size="sm"
+                variant="ghost"
+                label="알림 닫기"
+                icon={<X size={13} />}
+                onClick={() => setPreviousHighlights(null)}
+              />
+            </div>
+          )}
+          {actionError && (
+            <div className="reader-notice" data-tone="error" role="alert">
+              <span>{actionError}</span>
+              <AxIconButton
+                size="sm"
+                variant="ghost"
+                label="알림 닫기"
+                icon={<X size={13} />}
+                onClick={() => setActionError(null)}
+              />
+            </div>
+          )}
+          {speech.reading && (
+            <div className="reader-notice" role="status">
+              <span>선택한 구절 읽는 중</span>
+              <Button
+                size="sm"
+                variant="ghost"
+                label="읽기 중지"
+                icon={<Square size={12} />}
+                onClick={speech.stop}
+              />
+            </div>
+          )}
         </div>
       )}
       <div className="reader-content">
         {railOpen && !chrome.focusMode && (
           <aside className="navigation-rail">
-            <div className="rail-tabs" role="tablist" aria-label="문서 탐색">
-              <button type="button" role="tab" aria-selected={railMode === "search"} onClick={openSearch}>
-                <Search size={14} /> 검색
-              </button>
-              <button type="button" role="tab" aria-selected={railMode === "outline"} onClick={closeSearch}>
-                <ListTree size={14} /> 목차
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={railMode === "highlights"}
-                onClick={() => setRailMode("highlights")}
-              >
-                <Highlighter size={14} /> 주석
-              </button>
-            </div>
+            <SegmentedControl
+              className="rail-tabs"
+              label="문서 탐색"
+              size="sm"
+              layout="fill"
+              value={railMode}
+              onChange={(value) => {
+                if (value === "search") openSearch()
+                else if (value === "outline") closeSearch()
+                else setRailMode("highlights")
+              }}
+            >
+              <SegmentedControlItem value="search" label="검색" icon={<Search size={13} />} />
+              <SegmentedControlItem value="outline" label="목차" icon={<ListTree size={13} />} />
+              <SegmentedControlItem value="highlights" label="주석" icon={<Highlighter size={13} />} />
+            </SegmentedControl>
             {railMode === "highlights" ? (
               <HighlightsPanel
                 highlights={highlights}

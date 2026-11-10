@@ -1,3 +1,4 @@
+import { LayerProvider } from "@astryxdesign/core/Layer"
 import { Theme } from "@astryxdesign/core/theme"
 import { neutralTheme } from "@astryxdesign/theme-neutral/built"
 import React, { type ReactNode, useEffect, useState } from "react"
@@ -23,7 +24,7 @@ function AppTheme({ children }: { children: ReactNode }) {
   }, [])
   return (
     <Theme theme={neutralTheme} mode={mode}>
-      {children}
+      <LayerProvider toast={{ position: "bottomEnd", maxVisible: 3 }}>{children}</LayerProvider>
     </Theme>
   )
 }

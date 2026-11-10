@@ -4,11 +4,13 @@ import { Tab, TabList } from "@astryxdesign/core/TabList"
 import {
   AArrowDown,
   AArrowUp,
+  ArrowLeft,
   ArrowUp,
   Camera,
   Copy,
   FlaskConical,
   PanelRightClose,
+  RefreshCw,
   Settings2,
   Sparkles,
   Square,
@@ -415,6 +417,7 @@ export function AiSidebar({
       <div className="sidebar-resize-handle" onPointerDown={resize} aria-hidden="true" />
       <header className="ai-panel-header">
         <TabList
+          role="tablist"
           className="ai-panel-tabs"
           aria-label="학습 공간"
           size="md"
@@ -425,7 +428,7 @@ export function AiSidebar({
           }}
         >
           {tabs.map(([id, label]) => (
-            <Tab key={id} value={id} label={label} />
+            <Tab key={id} value={id} label={label} panelId="study-panel" />
           ))}
         </TabList>
         <IconButton
@@ -470,7 +473,7 @@ export function AiSidebar({
           <Settings2 size={13} />
         </button>
       )}
-      <div className="study-content">
+      <div className="study-content" id="study-panel" role="tabpanel">
         <GoalList
           hidden={tab !== "goals"}
           snapshot={snapshot}
@@ -566,19 +569,21 @@ export function AiSidebar({
           <div className="study-chat-messages">
             {tab === "result" && actionView && (
               <div className="study-action-heading">
-                <div className="study-actions">
-                  <button type="button" onClick={() => setTab(actionView.returnTab)}>
-                    ←{" "}
-                    {actionView.returnTab === "goals"
-                      ? "학습 목표로"
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  icon={<ArrowLeft size={14} />}
+                  label={`${
+                    actionView.returnTab === "goals"
+                      ? "학습 목표"
                       : actionView.returnTab === "sections"
-                        ? "섹션으로"
+                        ? "섹션"
                         : actionView.returnTab === "learning"
-                          ? "학습으로"
-                          : "대화로"}{" "}
-                    돌아가기
-                  </button>
-                </div>
+                          ? "학습"
+                          : "대화"
+                  }로 돌아가기`}
+                  onClick={() => setTab(actionView.returnTab)}
+                />
                 <h2>{actionView.title}</h2>
                 {displayedMessages[0]?.goalId && (
                   <div className="study-actions">
@@ -590,16 +595,17 @@ export function AiSidebar({
                           이전에 저장한 설명입니다. 현재 질문·원문 분석 기준으로 다시 작성할 수 있습니다.
                         </p>
                       )}
-                    <button
-                      type="button"
-                      disabled={!ready}
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      label="설명 다시 만들기"
+                      icon={<RefreshCw size={13} />}
+                      isDisabled={!ready}
                       onClick={() => {
                         const goal = snapshot?.goals.find((goal) => goal.id === displayedMessages[0]?.goalId)
                         if (goal) void generate("chat", goal.question, goalScope(goal), goal.id, null)
                       }}
-                    >
-                      설명 다시 만들기
-                    </button>
+                    />
                   </div>
                 )}
                 {!displayedMessages.length && <p role="status">원문을 확인하며 자료를 준비하고 있습니다…</p>}
@@ -743,16 +749,30 @@ export function AiSidebar({
         )}
         {tab === "learning" && (
           <section className="learning-panel">
-            <span className="study-eyebrow">예측하고, 확인하고, 설명하기</span>
-            <h2>Interactive Learning</h2>
+            <header className="goal-list-heading">
+              <div className="goal-list-title">
+                <h2>직접 탐구하기</h2>
+                {!!snapshot?.lessons.length && (
+                  <span className="section-count">{snapshot.lessons.length}개 수업</span>
+                )}
+              </div>
+              <p className="section-list-hint">예측하고, 원문으로 확인하고, 자기 말로 설명해 보세요.</p>
+            </header>
             {selectedLessonId && (
               <div className="study-actions">
-                <button type="button" onClick={() => setSelectedLessonId(null)}>
-                  전체 학습 보기
-                </button>
-                <button
-                  type="button"
-                  disabled={!ready}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  label="전체 학습 보기"
+                  icon={<ArrowLeft size={14} />}
+                  onClick={() => setSelectedLessonId(null)}
+                />
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  label="학습 새로 만들기"
+                  icon={<RefreshCw size={13} />}
+                  isDisabled={!ready}
                   onClick={() => {
                     const lesson = snapshot?.lessons.find((item) => item.id === selectedLessonId)
                     const goal = snapshot?.goals.find((item) => item.id === lesson?.goalId)
@@ -765,9 +785,7 @@ export function AiSidebar({
                         null,
                       )
                   }}
-                >
-                  학습 새로 만들기
-                </button>
+                />
               </div>
             )}
             {!snapshot?.lessons.length && (
@@ -797,16 +815,16 @@ export function AiSidebar({
       {(error || connectionError) && (
         <div className="study-error" role="alert">
           <p>{error || connectionError}</p>
-          <button
-            type="button"
+          <IconButton
+            size="sm"
+            variant="ghost"
+            label="알림 닫기"
+            icon={<X size={14} />}
             onClick={() => {
               setError(null)
               setConnectionError(null)
             }}
-            aria-label="알림 닫기"
-          >
-            ×
-          </button>
+          />
         </div>
       )}
       {busy && (
@@ -815,9 +833,15 @@ export function AiSidebar({
             <i className="is-spinning" />
             {stopping === busy.requestId ? "생성을 중지하는 중" : phaseLabels[busy.phase]}
           </span>
-          <button type="button" disabled={stopping === busy.requestId} onClick={() => void stopGeneration()}>
-            <Square size={11} /> 중지
-          </button>
+          <Button
+            size="sm"
+            variant="secondary"
+            label="중지"
+            tooltip="생성 중지 (Esc)"
+            icon={<Square size={11} />}
+            isDisabled={stopping === busy.requestId}
+            onClick={() => void stopGeneration()}
+          />
         </div>
       )}
       {tab === "chat" && (

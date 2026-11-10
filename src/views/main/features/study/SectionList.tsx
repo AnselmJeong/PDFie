@@ -1,10 +1,13 @@
+import { Button } from "@astryxdesign/core/Button"
+import { DropdownMenu, DropdownMenuDivider, DropdownMenuItem } from "@astryxdesign/core/DropdownMenu"
+import { IconButton } from "@astryxdesign/core/IconButton"
 import {
   BookOpen,
   ChevronDown,
   ChevronRight,
+  Ellipsis,
   FileText,
   Merge,
-  MoreHorizontal,
   Pencil,
   RefreshCw,
   Scissors,
@@ -69,14 +72,12 @@ export function SectionList({
   onMerge: () => void
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [menuId, setMenuId] = useState<string | null>(null)
   const [editor, setEditor] = useState<{ id: string; title: string } | null>(null)
   const [split, setSplit] = useState<SplitEditor | null>(null)
   const [editing, setEditing] = useState(false)
   const [pendingSummaryId, setPendingSummaryId] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
   const outline = useMemo(() => sectionOutline(snapshot?.sections ?? []), [snapshot?.sections])
-  const menuTrigger = useRef<HTMLButtonElement | null>(null)
   const titleInput = useRef<HTMLInputElement>(null)
   const splitSelect = useRef<HTMLSelectElement>(null)
   const mounted = useRef(true)
@@ -97,28 +98,6 @@ export function SectionList({
   useEffect(() => {
     if (split?.sectionId) splitSelect.current?.focus()
   }, [split?.sectionId])
-  useEffect(() => {
-    if (!menuId) return
-    const dismiss = (event: PointerEvent | FocusEvent) => {
-      if (event.target instanceof Element && !event.target.closest(".section-more")) setMenuId(null)
-    }
-    const dismissWithEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return
-      event.preventDefault()
-      event.stopPropagation()
-      setMenuId(null)
-      menuTrigger.current?.focus()
-    }
-    document.addEventListener("pointerdown", dismiss)
-    document.addEventListener("focusin", dismiss)
-    document.addEventListener("keydown", dismissWithEscape, true)
-    return () => {
-      document.removeEventListener("pointerdown", dismiss)
-      document.removeEventListener("focusin", dismiss)
-      document.removeEventListener("keydown", dismissWithEscape, true)
-    }
-  }, [menuId])
-
   const mutate = async (operation: () => Promise<unknown>) => {
     setEditing(true)
     try {
@@ -137,16 +116,15 @@ export function SectionList({
 
   return (
     <section className="sections-panel">
-      <div className="section-list-heading">
-        <div>
-          <span className="study-eyebrow">원문의 흐름을 따라</span>
+      <header className="section-list-heading">
+        <div className="goal-list-title">
           <h2>섹션별 읽기</h2>
+          {!!snapshot?.sections.length && (
+            <span className="section-count">{snapshot.sections.length}개 섹션</span>
+          )}
         </div>
-        {!!snapshot?.sections.length && (
-          <span className="section-count">{snapshot.sections.length}개 섹션</span>
-        )}
-      </div>
-      <p className="study-muted section-list-hint">제목을 눌러 요약을 펼치고, 함께 공부해 보세요.</p>
+        <p className="section-list-hint">제목을 눌러 요약을 펼치고, 원문 흐름을 따라 함께 공부해 보세요.</p>
+      </header>
       <ol className="section-list" aria-label="문서 섹션">
         {snapshot?.sections.map((section, index) => {
           const ancestorCollapsed = (() => {
@@ -203,7 +181,6 @@ export function SectionList({
               className="section-row"
               key={section.id}
               data-expanded={expanded}
-              data-menu-open={menuId === section.id}
               data-level={section.level}
               data-kind={section.kind}
               style={{ "--section-depth": Math.min(section.level, 4) - 1 } as CSSProperties}
@@ -263,116 +240,95 @@ export function SectionList({
                   {section.kind === "front" && <span className="section-kind">제목·저자</span>}
                 </span>
                 <div className="section-row-actions">
-                  <button
-                    type="button"
-                    className="section-quiet-action"
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    label="요약"
+                    tooltip={`${section.title} 요약 ${expanded ? "접기" : "펼치기"}`}
+                    icon={<FileText size={13} aria-hidden="true" />}
+                    aria-expanded={expanded}
                     onClick={toggleSummary}
-                    aria-label={`${section.title} 요약 ${expanded ? "접기" : "펼치기"}`}
-                  >
-                    <FileText size={12} aria-hidden="true" />
-                    요약
-                  </button>
-                  <button
-                    type="button"
-                    className="section-study-action"
-                    disabled={!ready}
-                    title={!ready ? unavailableReason : undefined}
+                  />
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    label="함께 공부하기"
+                    tooltip={!ready ? unavailableReason : undefined}
+                    icon={<BookOpen size={13} aria-hidden="true" />}
+                    isDisabled={!ready}
                     onClick={() => onStudy(section)}
-                  >
-                    <BookOpen size={13} aria-hidden="true" />
-                    함께 공부하기
-                  </button>
-                  <div className="section-more">
-                    <button
-                      type="button"
-                      className="section-more-trigger"
-                      aria-label={`${section.title} 더 보기`}
-                      aria-expanded={menuId === section.id}
-                      aria-controls={`section-options-${section.id}`}
-                      onClick={(event) => {
-                        menuTrigger.current = event.currentTarget
-                        setMenuId(menuId === section.id ? null : section.id)
-                      }}
-                    >
-                      <MoreHorizontal size={17} aria-hidden="true" />
-                    </button>
-                    {menuId === section.id && (
-                      <fieldset
-                        className="section-more-popover"
-                        id={`section-options-${section.id}`}
-                        aria-label="섹션 편집"
-                      >
-                        <button
-                          type="button"
-                          disabled={!!busy || editing}
-                          onClick={() => {
-                            setEditor({ id: section.id, title: section.title })
-                            setSplit(null)
-                            setMenuId(null)
-                          }}
-                        >
-                          <Pencil size={13} aria-hidden="true" />
-                          제목 수정
-                        </button>
-                        <button
-                          type="button"
-                          disabled={!!busy || editing}
-                          onClick={() => {
-                            setMenuId(null)
-                            void mutate(async () => {
-                              const points = await rpc.request["study.section.splitPoints"]({
-                                documentId,
-                                sectionId: section.id,
-                              })
-                              if (mounted.current) {
-                                setEditor(null)
-                                setSplit({
-                                  sectionId: section.id,
-                                  blockId: points[0]?.id ?? "",
-                                  title: "새 섹션",
-                                  points,
-                                })
-                              }
-                            })
-                          }}
-                        >
-                          <Scissors size={13} aria-hidden="true" />
-                          나누기
-                        </button>
-                        <button
-                          type="button"
-                          disabled={!!busy || editing || index === 0}
-                          onClick={() => {
-                            setMenuId(null)
-                            void mutate(async () => {
-                              await rpc.request["study.section.merge"]({ documentId, sectionId: section.id })
-                              setExpandedId(null)
-                              setEditor(null)
-                              setSplit(null)
-                              onMerge()
-                            })
-                          }}
-                        >
-                          <Merge size={13} aria-hidden="true" />
-                          이전과 합치기
-                        </button>
-                        {summary && (
-                          <button
-                            type="button"
-                            disabled={!ready}
-                            onClick={() => {
-                              setMenuId(null)
-                              setExpandedId(section.id)
-                              requestSummary(section)
-                            }}
-                          >
-                            <RefreshCw size={13} aria-hidden="true" />
-                            요약 다시 만들기
-                          </button>
-                        )}
-                      </fieldset>
+                  />
+                  <DropdownMenu
+                    alignment="end"
+                    menuWidth={190}
+                    renderTrigger={(trigger) => (
+                      <IconButton
+                        {...trigger}
+                        size="sm"
+                        variant="ghost"
+                        label={`${section.title} 더 보기`}
+                        icon={<Ellipsis size={15} aria-hidden="true" />}
+                      />
                     )}
-                  </div>
+                  >
+                    <DropdownMenuItem
+                      label="제목 수정"
+                      icon={Pencil}
+                      isDisabled={!!busy || editing}
+                      onClick={() => {
+                        setEditor({ id: section.id, title: section.title })
+                        setSplit(null)
+                      }}
+                    />
+                    <DropdownMenuItem
+                      label="나누기"
+                      icon={Scissors}
+                      isDisabled={!!busy || editing}
+                      onClick={() =>
+                        void mutate(async () => {
+                          const points = await rpc.request["study.section.splitPoints"]({
+                            documentId,
+                            sectionId: section.id,
+                          })
+                          if (mounted.current) {
+                            setEditor(null)
+                            setSplit({
+                              sectionId: section.id,
+                              blockId: points[0]?.id ?? "",
+                              title: "새 섹션",
+                              points,
+                            })
+                          }
+                        })
+                      }
+                    />
+                    <DropdownMenuItem
+                      label="이전과 합치기"
+                      icon={Merge}
+                      isDisabled={!!busy || editing || index === 0}
+                      onClick={() =>
+                        void mutate(async () => {
+                          await rpc.request["study.section.merge"]({ documentId, sectionId: section.id })
+                          setExpandedId(null)
+                          setEditor(null)
+                          setSplit(null)
+                          onMerge()
+                        })
+                      }
+                    />
+                    {summary && <DropdownMenuDivider />}
+                    {summary && (
+                      <DropdownMenuItem
+                        label="요약 다시 만들기"
+                        icon={RefreshCw}
+                        isDisabled={!ready}
+                        onClick={() => {
+                          setExpandedId(section.id)
+                          requestSummary(section)
+                        }}
+                      />
+                    )}
+                  </DropdownMenu>
                 </div>
               </div>
               {editor?.id === section.id && (
@@ -399,13 +355,22 @@ export function SectionList({
                       onChange={(event) => setEditor({ ...editor, title: event.target.value })}
                     />
                   </label>
-                  <div className="study-actions">
-                    <button type="submit" disabled={editing || !!busy || !editor.title.trim()}>
-                      저장
-                    </button>
-                    <button type="button" disabled={editing} onClick={() => setEditor(null)}>
-                      취소
-                    </button>
+                  <div className="goal-editor-actions">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      label="취소"
+                      isDisabled={editing}
+                      onClick={() => setEditor(null)}
+                    />
+                    <Button
+                      type="submit"
+                      size="sm"
+                      variant="primary"
+                      label="저장"
+                      isLoading={editing}
+                      isDisabled={!!busy || !editor.title.trim()}
+                    />
                   </div>
                 </form>
               )}
@@ -451,16 +416,22 @@ export function SectionList({
                       ? "선택한 원문 위치부터 새 섹션이 시작됩니다."
                       : "이 섹션에는 나눌 수 있는 추가 원문이 없습니다."}
                   </small>
-                  <div className="study-actions">
-                    <button
+                  <div className="goal-editor-actions">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      label="취소"
+                      isDisabled={editing}
+                      onClick={() => setSplit(null)}
+                    />
+                    <Button
                       type="submit"
-                      disabled={editing || !!busy || !split.blockId || !split.title.trim()}
-                    >
-                      나누기 저장
-                    </button>
-                    <button type="button" disabled={editing} onClick={() => setSplit(null)}>
-                      취소
-                    </button>
+                      size="sm"
+                      variant="primary"
+                      label="나누기 저장"
+                      isLoading={editing}
+                      isDisabled={!!busy || !split.blockId || !split.title.trim()}
+                    />
                   </div>
                 </form>
               )}
@@ -493,15 +464,15 @@ export function SectionList({
                           ? "이 섹션의 핵심 흐름을 원문 근거와 함께 정리합니다."
                           : unavailableReason}
                     </p>
-                    <button
-                      type="button"
-                      className="section-quiet-action"
-                      disabled={!ready}
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      label={failed ? "요약 다시 시도" : "요약 만들기"}
+                      icon={<FileText size={13} aria-hidden="true" />}
+                      isDisabled={!ready}
+                      tooltip={!ready ? unavailableReason : undefined}
                       onClick={() => requestSummary(section)}
-                    >
-                      <FileText size={13} aria-hidden="true" />
-                      {failed ? "요약 다시 시도" : "요약 만들기"}
-                    </button>
+                    />
                   </>
                 )}
                 {summary && failed && !generating && (
