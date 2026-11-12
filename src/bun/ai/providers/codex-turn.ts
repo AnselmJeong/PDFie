@@ -55,7 +55,9 @@ export function verifyCodexThread(value: unknown, model: string): string {
     !Array.isArray(result.instructionSources) ||
     result.instructionSources.length !== 0
   )
-    throw new Error("Codex의 학습 전용 실행 설정을 확인하지 못했습니다. 연결 상태를 새로고침하세요.")
+    throw new Error(
+      "Codex의 학습 전용 실행 설정을 확인하지 못했습니다. 연결 상태를 새로고침하세요. Codex CLI 업데이트로 연결 방식이 바뀌었다면 PDFie도 업데이트해야 합니다.",
+    )
   return result.thread.id
 }
 

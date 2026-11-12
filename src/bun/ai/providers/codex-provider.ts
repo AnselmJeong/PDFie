@@ -9,7 +9,29 @@ import type { GenerationInput, StudyProvider } from "../provider-contract"
 import { JsonRpcProcess } from "../transport/json-rpc-process"
 import { CODEX_THREAD_POLICY, runCodexTurn, verifyCodexThread } from "./codex-turn"
 
-export const VERIFIED_CODEX_VERSION = "codex-cli 0.160.0"
+/** The oldest CLI whose App Server protocol PDFie was verified against. */
+export const MINIMUM_CODEX_VERSION = "0.160.0"
+
+/**
+ * Newer CLIs are accepted: the safety properties do not rest on the version
+ * string but on per-request checks (verifyCodexThread confirms a read-only,
+ * no-network thread with no environments, roots or instruction sources, and
+ * the transport refuses tool and approval requests). A protocol change there
+ * fails closed. Older or unreadable versions are refused up front.
+ */
+export function codexVersionSupport(raw: string | null): "supported" | "outdated" | "unknown" {
+  const match = raw?.match(/(\d+)\.(\d+)\.(\d+)/)
+  if (!match) return "unknown"
+  const version = match.slice(1, 4).map(Number)
+  const minimum = MINIMUM_CODEX_VERSION.split(".").map(Number)
+  for (let i = 0; i < 3; i++) {
+    const current = version[i] ?? 0
+    const required = minimum[i] ?? 0
+    if (current > required) return "supported"
+    if (current < required) return "outdated"
+  }
+  return "supported"
+}
 
 export function isolatedCodexEnvironment(
   home: string,
@@ -212,6 +234,7 @@ export class CodexProvider implements StudyProvider {
         refreshToken: false,
       })
       const connected = account.account?.type === "chatgpt"
+      const versionSupport = codexVersionSupport(this.#version)
       let quota: Pick<ProviderStatus, "allowance" | "windows"> = { allowance: "unknown", windows: [] }
       let error: string | undefined
       if (connected) {
@@ -228,16 +251,17 @@ export class CodexProvider implements StudyProvider {
         version: this.#version,
         ...quota,
         error,
-        generationAvailable:
-          connected && quota.allowance === "available" && this.#version === VERIFIED_CODEX_VERSION,
+        generationAvailable: connected && quota.allowance === "available" && versionSupport === "supported",
         generationNotice:
-          this.#version !== VERIFIED_CODEX_VERSION
-            ? "이 Codex CLI 버전은 아직 검증되지 않았습니다. 지원 버전은 0.160.0입니다."
-            : quota.allowance === "exhausted"
-              ? "Codex 사용 한도를 소진했습니다. 한도가 재설정되면 사용할 수 있습니다."
-              : connected && quota.allowance === "unknown"
-                ? "사용 한도를 확인하면 학습 기능을 사용할 수 있습니다. 상태를 새로고침하세요."
-                : undefined,
+          versionSupport === "outdated"
+            ? `Codex CLI를 ${MINIMUM_CODEX_VERSION} 이상으로 업데이트하세요. 지금 버전은 PDFie와 연결 방식이 다릅니다.`
+            : versionSupport === "unknown"
+              ? "Codex CLI 버전을 확인하지 못했습니다. Codex를 다시 설치하거나 업데이트하세요."
+              : quota.allowance === "exhausted"
+                ? "Codex 사용 한도를 소진했습니다. 한도가 재설정되면 사용할 수 있습니다."
+                : connected && quota.allowance === "unknown"
+                  ? "사용 한도를 확인하면 학습 기능을 사용할 수 있습니다. 상태를 새로고침하세요."
+                  : undefined,
       }
     } catch {
       this.close()

@@ -244,7 +244,9 @@ export function SettingsWindow() {
                       {connection.label}
                     </span>
                   }
-                  description="PDFie 전용 로그인입니다. Codex 사용 한도는 다른 앱과 공유됩니다."
+                  description={`PDFie 전용 로그인입니다. Codex 사용 한도는 다른 앱과 공유됩니다.${
+                    providerState?.version ? ` · ${providerState.version}` : ""
+                  }`}
                 >
                   {providerState?.signingIn ? (
                     <Button

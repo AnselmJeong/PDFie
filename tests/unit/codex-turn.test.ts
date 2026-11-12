@@ -1,6 +1,6 @@
 import { expect, it, vi } from "vitest"
 import type { GenerationInput } from "../../src/bun/ai/provider-contract"
-import { CodexProvider } from "../../src/bun/ai/providers/codex-provider"
+import { CodexProvider, codexVersionSupport } from "../../src/bun/ai/providers/codex-provider"
 import {
   CODEX_THREAD_POLICY,
   type CodexTransport,
@@ -274,3 +274,16 @@ it.each(["unknown", "exhausted"] as const)(
     vi.restoreAllMocks()
   },
 )
+
+it.each([
+  ["codex-cli 0.160.0", "supported"],
+  ["codex-cli 0.160.3", "supported"],
+  ["codex-cli 0.171.0", "supported"],
+  ["codex-cli 1.0.0-alpha.2", "supported"],
+  ["codex-cli 0.159.9", "outdated"],
+  ["codex-cli 0.99.0", "outdated"],
+  ["codex-cli", "unknown"],
+  [null, "unknown"],
+] as const)("treats Codex CLI %s as %s", (version, expected) => {
+  expect(codexVersionSupport(version)).toBe(expected)
+})
