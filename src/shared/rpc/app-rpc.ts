@@ -129,11 +129,11 @@ export type AppRPC = {
       "app.window.state": { params: Record<string, never>; response: { fullScreen: boolean } }
       "app.ping": { params: Record<string, never>; response: { ok: true; renderer: "native" } }
       "pdf.openDialog": { params: Record<string, never>; response: PdfOpenResult | null }
-      "pdf.prepareDrop": {
-        params: { fileName: string; sizeBytes: number }
-        response: { uploadUrl: string }
+      /** Files macOS asked PDFie to open (Open With, double-click, the Dock icon). */
+      "pdf.takeOpenRequests": {
+        params: Record<string, never>
+        response: { opened: PdfOpenResult[]; failed: string[] }
       }
-      "pdf.completeDrop": { params: { documentId: string }; response: PdfOpenResult }
       "pdf.close": { params: { documentId: string }; response: { closed: boolean } }
       "pdf.saveState": {
         params: {
@@ -178,6 +178,7 @@ export type AppRPC = {
       "app.settings.contextChanged": Record<string, never>
       "study.records.changed": { documentHash: string }
       "pdf.openRequested": Record<string, never>
+      "pdf.openRequestsPending": Record<string, never>
       "library.openRequested": Record<string, never>
       "app.window.fullScreen": { fullScreen: boolean }
       "ai.token": { requestId: string; token: string }

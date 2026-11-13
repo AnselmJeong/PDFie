@@ -10,7 +10,6 @@ import type {
 } from "../../shared/pdf/domain"
 import type { CaptureAsset, EvidenceRef } from "../../shared/study/contracts"
 import { AiSidebar } from "./components/AiSidebar"
-import { PdfDropOverlay } from "./components/PdfDropOverlay"
 import { EmbedPdfWorkspace, type ReaderStatus } from "./features/pdf/adapters/EmbedPdfWorkspace"
 import { StudyLibrary } from "./features/study/StudyLibrary"
 import { rpc } from "./rpc"
@@ -28,8 +27,6 @@ export function App() {
   const [source, setSource] = useState<PdfViewerSource | null>(null)
   const [view, setView] = useState<"library" | "reader">("library")
   const [opening, setOpening] = useState(false)
-  const [draggingFile, setDraggingFile] = useState(false)
-  const [uploadingDrop, setUploadingDrop] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selection, setSelection] = useState<PdfSelection | null>(null)
   const [status, setStatus] = useState<ReaderStatus>(initialStatus)
@@ -46,7 +43,6 @@ export function App() {
     highlights: [] as PdfTextHighlight[],
   })
   const openingRef = useRef(false)
-  const dragDepth = useRef(0)
   const [capture, setCapture] = useState<CaptureAsset | null>(null)
   const [captureRequest, setCaptureRequest] = useState<string | null>(null)
   const [revealRequest, setRevealRequest] = useState<{ id: string; evidence: EvidenceRef } | null>(null)
@@ -106,43 +102,25 @@ export function App() {
     }
   }, [applyOpenResult])
 
-  const openDroppedPdf = useCallback(
-    async (file: File) => {
-      if (openingRef.current) return
-      openingRef.current = true
-      setOpening(true)
-      setUploadingDrop(true)
-      setError(null)
-      let uploadedDocumentId: string | null = null
-      try {
-        const { uploadUrl } = await rpc.request["pdf.prepareDrop"]({
-          fileName: file.name,
-          sizeBytes: file.size,
-        })
-        const response = await fetch(uploadUrl, {
-          method: "POST",
-          body: file,
-        })
-        if (!response.ok) throw new Error("PDF를 앱으로 가져오지 못했습니다.")
-        const uploaded = (await response.json()) as { documentId?: unknown }
-        if (typeof uploaded.documentId !== "string") throw new Error("PDF 업로드 응답이 올바르지 않습니다.")
-        uploadedDocumentId = uploaded.documentId
-        const result = await rpc.request["pdf.completeDrop"]({ documentId: uploaded.documentId })
-        await applyOpenResult(result)
-        uploadedDocumentId = null
-      } catch (cause) {
-        if (uploadedDocumentId) {
-          await rpc.request["pdf.close"]({ documentId: uploadedDocumentId }).catch(() => undefined)
-        }
-        setError(cause instanceof Error ? cause.message : "드롭한 PDF를 열지 못했습니다.")
-      } finally {
-        openingRef.current = false
-        setOpening(false)
-        setUploadingDrop(false)
-      }
-    },
-    [applyOpenResult],
-  )
+  // Files macOS asked PDFie to open (Open With, double-click, the Dock icon).
+  // They may arrive before this view loads, so take them on mount and on notice.
+  const takeOpenRequests = useCallback(async () => {
+    try {
+      const { opened, failed } = await rpc.request["pdf.takeOpenRequests"]({})
+      for (const result of opened) await applyOpenResult(result)
+      if (failed.length) setError(failed.join("\n"))
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "PDF를 열지 못했습니다.")
+    }
+  }, [applyOpenResult])
+  const takeOpenRequestsRef = useRef(takeOpenRequests)
+  takeOpenRequestsRef.current = takeOpenRequests
+  useEffect(() => {
+    const pending = () => void takeOpenRequestsRef.current()
+    window.addEventListener("pdfie:open-requests-pending", pending)
+    pending()
+    return () => window.removeEventListener("pdfie:open-requests-pending", pending)
+  }, [])
 
   const closePdf = useCallback(async () => {
     if (!source) return
@@ -181,60 +159,30 @@ export function App() {
     }
   }, [openPdf])
 
+  // Files dropped on the window would only reach the page as anonymous bytes,
+  // so the library could not reopen them; point to the ways that keep the path.
   useEffect(() => {
     const containsFiles = (event: DragEvent) => Array.from(event.dataTransfer?.types ?? []).includes("Files")
-
-    const dragenter = (event: DragEvent) => {
-      if (!containsFiles(event)) return
-      event.preventDefault()
-      event.stopPropagation()
-      dragDepth.current += 1
-      setDraggingFile(true)
-    }
     const dragover = (event: DragEvent) => {
       if (!containsFiles(event)) return
       event.preventDefault()
-      event.stopPropagation()
-      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy"
-    }
-    const dragleave = (event: DragEvent) => {
-      if (dragDepth.current === 0) return
-      event.preventDefault()
-      event.stopPropagation()
-      dragDepth.current = Math.max(0, dragDepth.current - 1)
-      if (dragDepth.current === 0) setDraggingFile(false)
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "none"
     }
     const drop = (event: DragEvent) => {
       if (!containsFiles(event)) return
       event.preventDefault()
       event.stopPropagation()
-      dragDepth.current = 0
-      setDraggingFile(false)
-
-      const files = Array.from(event.dataTransfer?.files ?? [])
-      if (files.length !== 1) {
-        setError("PDF 파일을 한 번에 하나씩 놓아 주세요.")
-        return
-      }
-      const file = files[0]
-      if (!file?.name.toLowerCase().endsWith(".pdf")) {
-        setError("PDF 파일만 열 수 있습니다.")
-        return
-      }
-      void openDroppedPdf(file)
+      setNotice(
+        "PDF는 ⌘O(추가 → PDF 열기)로 열거나, Finder에서 ‘다음으로 열기 → PDFie’ 또는 Dock의 PDFie 아이콘에 끌어다 놓아 여세요.",
+      )
     }
-
-    window.addEventListener("dragenter", dragenter, true)
     window.addEventListener("dragover", dragover, true)
-    window.addEventListener("dragleave", dragleave, true)
     window.addEventListener("drop", drop, true)
     return () => {
-      window.removeEventListener("dragenter", dragenter, true)
       window.removeEventListener("dragover", dragover, true)
-      window.removeEventListener("dragleave", dragleave, true)
       window.removeEventListener("drop", drop, true)
     }
-  }, [openDroppedPdf])
+  }, [])
 
   useEffect(() => {
     if (!source || status.phase !== "ready") return
@@ -315,12 +263,7 @@ export function App() {
   )
 
   if (!source) {
-    return (
-      <>
-        {libraryView}
-        {(draggingFile || uploadingDrop) && <PdfDropOverlay uploading={uploadingDrop} />}
-      </>
-    )
+    return <>{libraryView}</>
   }
 
   return (
@@ -396,7 +339,6 @@ export function App() {
             onClose={() => setChatOpen(false)}
           />
         </div>
-        {(draggingFile || uploadingDrop) && <PdfDropOverlay uploading={uploadingDrop} />}
       </div>
     </>
   )

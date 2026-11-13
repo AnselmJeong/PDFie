@@ -16,6 +16,7 @@ export const rpc = Electroview.defineRPC<AppRPC>({
       "study.records.changed": (detail) =>
         window.dispatchEvent(new CustomEvent("pdfie:records-changed", { detail })),
       "study.event": (detail) => window.dispatchEvent(new CustomEvent("pdfie:study-event", { detail })),
+      "pdf.openRequestsPending": () => window.dispatchEvent(new CustomEvent("pdfie:open-requests-pending")),
       "pdf.openRequested": () => {
         window.dispatchEvent(new CustomEvent("pdfie:open-requested"))
       },

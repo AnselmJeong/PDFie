@@ -201,63 +201,6 @@
     border: 0;
   }
 
-  .pdf-drop-overlay {
-    position: fixed;
-    z-index: 100;
-    inset: 0;
-    display: grid;
-    place-items: center;
-    padding: 28px;
-    background: color-mix(in srgb, var(--background) 72%, transparent);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    pointer-events: none;
-  }
-  .pdf-drop-card {
-    display: flex;
-    width: min(480px, 100%);
-    min-height: 240px;
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
-    gap: 8px;
-    border: 1.5px dashed var(--border-strong);
-    border-radius: var(--radius-xl);
-    background: var(--card);
-    box-shadow: var(--shadow-xl);
-    animation: drop-card-arrive 160ms var(--ease-out) both;
-  }
-  .pdf-drop-icon {
-    display: grid;
-    width: 56px;
-    height: 56px;
-    margin-bottom: 8px;
-    place-items: center;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    background: var(--muted);
-    color: var(--foreground);
-  }
-  .pdf-drop-card strong {
-    font-size: 18px;
-    font-weight: 600;
-    letter-spacing: -0.02em;
-  }
-  .pdf-drop-card > span:last-child {
-    color: var(--muted-foreground);
-    font-size: 13px;
-  }
-
-  @keyframes drop-card-arrive {
-    from {
-      opacity: 0;
-      transform: scale(0.97);
-    }
-    to {
-      opacity: 1;
-      transform: scale(1);
-    }
-  }
   @keyframes toast-in {
     from {
       opacity: 0;

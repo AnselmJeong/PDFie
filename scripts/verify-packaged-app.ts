@@ -66,6 +66,25 @@ const requiredFiles = [
 
 for (const relativePath of requiredFiles) await access(join(inspectionTarget, relativePath))
 
+// Finder offers PDFie under "Open With" only for the system PDF type.
+async function plistText(path: string) {
+  const bytes = await Bun.file(path).bytes()
+  if (new TextDecoder().decode(bytes.slice(0, 6)) !== "bplist") return new TextDecoder().decode(bytes)
+  const xml = Bun.spawnSync(["/usr/bin/plutil", "-convert", "xml1", "-o", "-", path])
+  if (xml.exitCode !== 0)
+    throw new Error(`Cannot read binary Info.plist: ${new TextDecoder().decode(xml.stderr)}`)
+  return new TextDecoder().decode(xml.stdout)
+}
+const infoPlist = await plistText(join(inspectionTarget, "Contents/Info.plist"))
+const documentTypes =
+  /<key>CFBundleDocumentTypes<\/key>\s*<array>([\s\S]*?)<\/array>\s*(<key>|<\/dict>)/.exec(infoPlist)?.[1]
+if (!documentTypes?.includes("<string>com.adobe.pdf</string>"))
+  throw new Error("Info.plist does not declare PDFie as a viewer for com.adobe.pdf")
+if (infoPlist.includes("<key>UTExportedTypeDeclarations</key>"))
+  throw new Error("Info.plist exports its own document type; PDFs must use com.adobe.pdf")
+if (!/<key>LSMinimumSystemVersion<\/key>\s*<string>14\.0<\/string>/.test(infoPlist))
+  throw new Error("Info.plist does not require macOS 14")
+
 async function walk(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true })
   const nested = await Promise.all(
@@ -99,6 +118,7 @@ console.log(
     {
       target,
       inspected: payload ? `payload ${payload}` : "unpacked app",
+      opensPdf: "com.adobe.pdf",
       renderer: "native-webkit",
       cefBundled: false,
       fileCount: files.length,

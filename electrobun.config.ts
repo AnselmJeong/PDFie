@@ -6,7 +6,7 @@ export default {
     name: "PDFie",
     identifier: "dev.aquatope.pdfie",
     version: pkg.version,
-    fileAssociations: [{ ext: ["pdf"], name: "PDF document", role: "Viewer" }],
+    // PDF document types are declared by scripts/finalize-macos-bundle.ts.
   },
   runtime: {
     exitOnLastWindowClosed: true,
@@ -44,7 +44,7 @@ export default {
     },
   },
   scripts: {
-    postBuild: "scripts/set-macos-minimum-version.ts",
-    postWrap: "scripts/set-macos-minimum-version.ts",
+    postBuild: "scripts/finalize-macos-bundle.ts",
+    postWrap: "scripts/finalize-macos-bundle.ts",
   },
 } satisfies ElectrobunConfig

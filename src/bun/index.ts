@@ -12,6 +12,7 @@ import { backgroundIndexer } from "./pdf/background-index"
 import { PdfSourceBridge } from "./pdf/document-source-bridge"
 import { DocumentStateRepository } from "./pdf/document-state-repository"
 import { restoreMultipleSelectedPaths, restoreSingleSelectedPath } from "./pdf/open-file-dialog"
+import { OpenRequests } from "./pdf/open-requests"
 import { StudyLibrary } from "./persistence/study-library"
 import { StudyStore } from "./persistence/study-store"
 import { LibraryImporter } from "./study/library-importer"
@@ -19,6 +20,14 @@ import { linkLibraryPdf } from "./study/library-source"
 import { exportStudyMarkdown } from "./study/study-export"
 import { StudyService } from "./study/study-service"
 import { TopicClassifier } from "./study/topic-classifier"
+
+// Listen before the first await: macOS can deliver a file to open (Open With,
+// a double-click, the Dock icon) as soon as the app starts.
+const openRequests = new OpenRequests()
+Electrobun.events.on("open-url", (event) => {
+  const url = (event as { data?: { url?: unknown } }).data?.url
+  if (typeof url === "string") openRequests.add(url)
+})
 
 const sourceBridge = new PdfSourceBridge()
 await sourceBridge.start()
@@ -396,9 +405,19 @@ function createAppRpc(ownWindow: () => ZoomableWindow | null = () => null) {
         },
         "app.ping": async () => ({ ok: true as const, renderer: "native" as const }),
         "pdf.openDialog": async () => choosePdf(),
-        "pdf.prepareDrop": async ({ fileName, sizeBytes }) =>
-          sourceBridge.prepareDropUpload(fileName, sizeBytes),
-        "pdf.completeDrop": async ({ documentId }) => restorePdf(sourceBridge.getSource(documentId)),
+        "pdf.takeOpenRequests": async () => {
+          const opened: ReturnType<typeof restorePdf>[] = []
+          const failed: string[] = []
+          for (const path of openRequests.take()) {
+            try {
+              opened.push(restorePdf(await sourceBridge.register(path)))
+            } catch (cause) {
+              const name = path.split("/").at(-1) ?? path
+              failed.push(`${name}: ${cause instanceof Error ? cause.message : "PDF를 열지 못했습니다."}`)
+            }
+          }
+          return { opened, failed }
+        },
         "pdf.close": async ({ documentId }) => {
           await study.stop(undefined, documentHash(documentId))
           return { closed: sourceBridge.closeDocument(documentId) }
@@ -463,6 +482,7 @@ const mainWindow = new BrowserWindow({
 })
 
 zoomTargets.main = mainWindow
+openRequests.onAdded(() => mainWindow.webview.rpc?.proxy.send["pdf.openRequestsPending"]({}))
 applyInsetChrome(mainWindow)
 
 function appWindows() {
