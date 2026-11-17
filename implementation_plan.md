@@ -479,6 +479,7 @@ bun run verify:package
 | 저장 | idempotent migration, backup 복원, atomic asset, 강제 종료 |
 | 학습 | invalid schema, missing source, bad units/ranges, 스크립트·URL 주입 |
 | capture | 회전·Retina·축소, MIME/pixel bounds, 실패 upload cleanup |
+| 리더 (0.5) | 해시 보류 중 열기·캐시 적중/변경 감지, 참조·링크·캡션·참고문헌 해석(PDFium), 필기 JSON 왕복, 주석 사본의 `/AP`와 Quick Look 렌더, 여백 감지, 뒤로/앞으로 |
 
 prompt injection fixture에 “이전 지시 무시”, 로컬 파일 읽기, 외부 URL 전송 요구를 넣는다. source content가 tool/action이나 provider 설정으로 승격되지 않음을 검사한다.
 
@@ -522,6 +523,8 @@ system-volume의 별도 테스트 설치에서 검증한다. 기존 ADR의 exter
 release blockers: 잘못된 문단을 정확한 근거처럼 강조, 다른 문서의 history 유입, 원문/주석 손상, 인증 정보 노출, 임의 generated code 실행, 숨은 유료 API 전환, 취소 후 무한 생성, 복구 불가능한 이관.
 
 허용 가능한 제한은 UI와 release note에 명시한다. 예: 일부 스캔은 OCR 필요, 특정 모델은 vision 불가, Claude 경로는 검증 중, 일부 학습은 개념 예시. 제한이 있는 기능을 지원 완료라고 쓰지 않는다.
+
+리더 보완(빠른 열기, 탐색 기록, 그림·참고문헌 미리 보기, 연속 스크롤, 여백 자르기, 필기, 주석 내보내기)은 `docs/update_plan.md`에 따라 0.5.0에서 구현했고, 결정과 한계는 [ADR 009](docs/decisions/009-reader-navigation-and-marks.md)에 남겼다.
 
 구현 완료 시 README와 ADR 002를 실제 provider·저장·streaming 동작에 맞게 갱신한다. 재현 가능한 QA 결과, 실제 CLI/모델/runtime 버전, package 경로, 확인하지 못한 항목을 함께 남긴다.
 

@@ -79,9 +79,38 @@ OpenIntelligentUI integration ports its MIT-licensed design system and CSS → H
 Windows use an inset title bar: the app's own title bars are draggable, the window controls sit centred in them, and double-clicking empty space zooms the window. In full screen the title bars start at the window edge. The title bar holds navigation, the document title, search, capture, annotations,
 **Ask AI** (toggles the study panel, **⌘/**) and a **⋯** menu for document type,
 rotation, focus mode, export, settings and closing the document. A floating page
-dock on the canvas controls the view (one/two pages, actual size, fit page/width),
-zoom and page position. **F** toggles focus mode, which hides everything but the
-page and the dock.
+dock on the canvas controls the view (one/two pages, page-by-page or continuous
+scrolling, margin cropping, actual size, fit page/width), zoom, back/forward and
+page position. **F** toggles focus mode, which hides everything but the page and
+the dock.
+
+**Opening.** A PDF is shown as soon as its header is read; PDFie loads pages by
+range and hashes a file it has not seen before in the background. Until the hash
+is known, the study panel waits and highlights, captures and marks are paused,
+so no other document's records can appear. Files opened before and unchanged
+since are identified at once from a local hash cache.
+
+**Navigation.** Jumps — outline, search results, the page field, annotations,
+evidence, PDF links and references — are recorded: **⌘[** / **⌘]**, the dock's
+arrows or the mouse's back/forward buttons return to the exact place. Hover
+over "Figure 3", "Table 2", "그림 1" or a citation such as "[12]" to preview the
+caption or bibliography entry; click to go there. PDF links work the same way;
+web and mail links open in the default app. Targets come from the study index, so
+they appear as background indexing reaches them.
+
+**Layout.** In **보기 옵션**, choose **페이지 단위** or **연속 스크롤** and turn on
+**여백 자동 자르기**; **더 자르기/덜 자르기** fine-tune the crop. Cropping changes only
+the view and is remembered per document with the layout.
+
+**Marks.** The pen button opens a toolbar for pen, highlighter pen, line, arrow,
+rectangle, ellipse, text box and note, with five colors, three widths, an eraser,
+undo/redo (**⌘Z**, **⇧⌘Z**) and **Esc** to finish. Marks are saved per document
+without modifying the PDF and are listed under **주석**. The PDF's own annotations
+are displayed but not changed. From the **⋯** menu, **주석 포함 PDF 사본 저장**
+writes a copy with marks and highlights as standard PDF annotations (the
+original is never overwritten; Korean text in a text box is exported as a note),
+and **주석을 Markdown으로 내보내기** writes highlights, notes and marks as Markdown.
+See [ADR 009](docs/decisions/009-reader-navigation-and-marks.md).
 
 ## Selected-text actions
 
@@ -94,7 +123,8 @@ the sentence they support.
 
 The **주석** navigation tab lists saved passages as cards tinted by their color;
 change the color with the swatches, edit the note inline, or jump back to the page. Annotation changes can be undone. Highlights and
-notes persist per document without modifying the original PDF.
+notes persist per document without modifying the original PDF. Pen and shape marks
+appear below the highlights.
 
 ## Architecture records
 
@@ -105,5 +135,6 @@ notes persist per document without modifying the original PDF.
 - `docs/decisions/004-provider-auth.md`
 - `docs/decisions/005-lesson-runtime.md`
 - `docs/decisions/008-astryx-design-system.md`
+- `docs/decisions/009-reader-navigation-and-marks.md`
 - `docs/qa/phase-0-results.md`
 - `docs/qa/research-platform-spike.md`
