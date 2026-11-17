@@ -70,7 +70,7 @@ export const THEME_CSS = `
     --color-border-warning: #EF9F27;
   }
 }
-`;
+`
 
 // ─── SVG Pre-Built Classes ───────────────────────────────────────────
 export const SVG_CLASSES_CSS = `
@@ -189,7 +189,7 @@ svg .c-red text.ts { fill: #A32D2D; }
   svg .c-red text.th, svg .c-red text.t { fill: #F7C1C1; }
   svg .c-red text.ts { fill: #F09595; }
 }
-`;
+`
 
 // ─── Form Element Styles (base, no entrance stagger) ─────────────────
 // Used by the MCP server's static documents, which animate via #content > *.
@@ -291,7 +291,7 @@ a:hover { text-decoration: underline; }
     animation-iteration-count: 1 !important;
   }
 }
-`;
+`
 
 // ─── Initial-Render Stagger (app-only addition) ──────────────────────
 // The streaming widget renderer gates the entrance animation behind the
@@ -310,7 +310,7 @@ export const INITIAL_RENDER_STAGGER_CSS = `/* First render: stagger all children
 /* Subsequent morphs: only new elements animate in */
 .morph-enter {
   animation: fadeSlideIn 0.4s ease-out both;
-}`;
+}`
 
 // ─── Form Element Styles + Initial-Render Stagger ────────────────────
 export const FORM_STYLES_WITH_STAGGER_CSS = `
@@ -427,7 +427,7 @@ a:hover { text-decoration: underline; }
     animation-iteration-count: 1 !important;
   }
 }
-`;
+`
 
 // ─── Open Generative UI Design Skill ─────────────────────────────────
 // Injected as agent context for the generateSandboxedUi tool. Replaces the
@@ -450,25 +450,25 @@ SVG diagrams and charts:
 Layout:
 - Use flex/grid with compact spacing.
 - The css parameter should hold widget-specific styles only — the theme, form styles, and SVG classes are already loaded.
-`.trim();
+`.trim()
 
 // ─── CDN Import Map ──────────────────────────────────────────────────
 export const IMPORTMAP = {
   imports: {
-    "three": "https://esm.sh/three",
+    three: "https://esm.sh/three",
     "three/": "https://esm.sh/three/",
-    "gsap": "https://esm.sh/gsap",
+    gsap: "https://esm.sh/gsap",
     "gsap/": "https://esm.sh/gsap/",
-    "d3": "https://esm.sh/d3",
+    d3: "https://esm.sh/d3",
     "d3/": "https://esm.sh/d3/",
     "chart.js": "https://esm.sh/chart.js",
     "chart.js/": "https://esm.sh/chart.js/",
   },
-} as const satisfies { imports: Record<string, string> };
+} as const satisfies { imports: Record<string, string> }
 
 export const IMPORTMAP_SCRIPT_TAG = `<script type="importmap">
 ${JSON.stringify(IMPORTMAP, null, 2)
   .split("\n")
   .map((line) => "  " + line)
   .join("\n")}
-  </script>`;
+  </script>`

@@ -3,14 +3,7 @@
   "realPaperPages": 17,
   "provider": "codex",
   "model": "gpt-6.1-sol",
-  "stepTypes": [
-    "explanation",
-    "prediction",
-    "comparison",
-    "sandbox",
-    "evidence-map",
-    "quiz"
-  ],
+  "stepTypes": ["explanation", "prediction", "comparison", "sandbox", "evidence-map", "quiz"],
   "evidenceCount": 21,
   "lessonId": "0ead2b7a-f7f3-4ba9-b2b2-1bcbf16cbc32",
   "published": true,
