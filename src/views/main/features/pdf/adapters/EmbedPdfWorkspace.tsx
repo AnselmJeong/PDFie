@@ -609,17 +609,18 @@ function ReaderChrome({
 
   // Open-time measurement: engine start, range loading and first layout.
   const reportedOpen = useRef(false)
+  const pageCount = documentState?.document?.pageCount ?? 0
   useEffect(() => {
-    if (reportedOpen.current || !scrollState.totalPages) return
+    if (reportedOpen.current || !pageCount) return
     reportedOpen.current = true
     const elapsed = Math.round(performance.now() - openedAt)
     void import("../../../rpc").then(({ rpc }) =>
       rpc.send["app.log"]({
         level: "info",
-        message: `[open] ${source.fileName}: ${scrollState.totalPages} pages, first page ready in ${elapsed} ms${source.documentHash ? "" : " (hash pending)"}`,
+        message: `[open] ${source.fileName}: ${pageCount} pages, first page ready in ${elapsed} ms${source.documentHash ? "" : " (hash pending)"}`,
       }),
     )
-  }, [openedAt, scrollState.totalPages, source.documentHash, source.fileName])
+  }, [openedAt, pageCount, source.documentHash, source.fileName])
 
   // Saved state for a file identified after it was shown. Annotations were
   // blocked until now, so they are adopted as-is; the view only moves if the

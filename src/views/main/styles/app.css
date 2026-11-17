@@ -3977,7 +3977,7 @@
   }
   /* A newly seen PDF is shown while its hash is computed; hash-bound panels wait. */
   .ai-sidebar-pending {
-    width: 340px;
+    width: 390px;
     align-items: center;
     justify-content: center;
     gap: 12px;
