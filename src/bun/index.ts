@@ -2,6 +2,8 @@ import { access } from "node:fs/promises"
 import { join } from "node:path"
 import Electrobun, { BrowserView, BrowserWindow, Utils } from "electrobun/bun"
 import type { PdfOpenResult } from "../shared/pdf/domain"
+import { safeExternalUrl } from "../shared/pdf/external-url"
+import { buildReferenceTargets } from "../shared/pdf/reference-links"
 import type { AppRPC } from "../shared/rpc/app-rpc"
 import type { StudyEvent } from "../shared/study/contracts"
 import { AiSettingsRepository } from "./ai/ai-settings-repository"
@@ -423,6 +425,14 @@ function createAppRpc(ownWindow: () => ZoomableWindow | null = () => null) {
         },
         "app.ping": async () => ({ ok: true as const, renderer: "native" as const }),
         "pdf.openDialog": async () => choosePdf(),
+        "pdf.referenceTargets": async ({ documentId }) =>
+          buildReferenceTargets(studyStore.blocks(await documentHash(documentId))),
+        "app.openExternal": async ({ url }) => {
+          const target = safeExternalUrl(url)
+          if (!target) return { opened: false }
+          Utils.openExternal(target)
+          return { opened: true }
+        },
         "pdf.identify": async ({ documentId }) => {
           await documentHash(documentId)
           return restorePdf(sourceBridge.getSource(documentId))

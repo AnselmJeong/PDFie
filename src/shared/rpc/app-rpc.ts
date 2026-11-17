@@ -1,6 +1,7 @@
 import type { RPCSchema } from "electrobun/bun"
 import type { AiSettingsStatus, AppearanceMode } from "../../bun/ai/ai-settings-repository"
 import type { PdfMark, PdfOpenResult, PdfTextHighlight } from "../pdf/domain"
+import type { ReferenceTarget } from "../pdf/reference-links"
 import type {
   CaptureAsset,
   IndexBeginRequest,
@@ -134,6 +135,10 @@ export type AppRPC = {
         params: Record<string, never>
         response: { opened: PdfOpenResult[]; failed: string[] }
       }
+      /** Captions and bibliography entries found so far in the document's study index. */
+      "pdf.referenceTargets": { params: { documentId: string }; response: ReferenceTarget[] }
+      /** Open a web or mail link from a PDF in the default app. */
+      "app.openExternal": { params: { url: string }; response: { opened: boolean } }
       /** Waits for a newly seen file's hash, then returns its restored state. */
       "pdf.identify": { params: { documentId: string }; response: PdfOpenResult }
       "pdf.close": { params: { documentId: string }; response: { closed: boolean } }

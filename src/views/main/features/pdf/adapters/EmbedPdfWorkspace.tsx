@@ -32,6 +32,8 @@ import { SpreadMode, useSpread } from "@embedpdf/plugin-spread/react"
 import { TilingLayer } from "@embedpdf/plugin-tiling/react"
 import { useZoom } from "@embedpdf/plugin-zoom/react"
 import {
+  ArrowLeft,
+  ArrowRight,
   Camera,
   ChevronDown,
   ChevronLeft,
@@ -70,6 +72,14 @@ import type {
   PdfViewerSource,
   SelectionAiRequest,
 } from "../../../../../shared/pdf/domain"
+import {
+  emptyHistory,
+  goBack,
+  goForward,
+  type ReadingPosition,
+  recordJump,
+} from "../../../../../shared/pdf/navigation-history"
+import { previewRegion, resolveMention } from "../../../../../shared/pdf/reference-links"
 import { toPdfSelection } from "../../../../../shared/pdf/selection"
 import type { CaptureAsset, EvidenceRef } from "../../../../../shared/study/contracts"
 import { DRAG, NO_DRAG } from "../../../window-chrome"
@@ -82,6 +92,9 @@ import type { FitMode } from "./fit-zoom"
 import { HighlightsPanel } from "./HighlightsPanel"
 import { PaginatedViewport } from "./PaginatedViewport"
 import { clampPage, getPageGroup } from "./page-navigation"
+import { type ReferenceHover, ReferenceLayer } from "./ReferenceLayer"
+import { ReferencePreview } from "./ReferencePreview"
+import { type PageReference, ReferenceIndex } from "./reference-index"
 import { SelectionActions } from "./SelectionActions"
 import { getSelectedTextPreservingVisualHyphens } from "./selection-text"
 import { beginNativeAnalysis } from "./study-analysis"
@@ -299,7 +312,8 @@ function ReaderChrome({
   openedAt,
 }: EmbedPdfWorkspaceProps & { documentId: string; registry: PluginRegistry; openedAt: number }) {
   const [evidence, setEvidence] = useState<EvidenceRef | null>(null)
-  const [returnPage, setReturnPage] = useState<number | null>(null)
+  const [evidenceNotice, setEvidenceNotice] = useState(false)
+  const [history, setHistory] = useState(emptyHistory)
   const [captureMode, setCaptureMode] = useState(false)
   const handledReveal = useRef<string | null>(null)
   const { provides: scroll, state: scrollState } = useScroll(documentId)
@@ -335,6 +349,122 @@ function ReaderChrome({
     },
     [pageGroup.next, pageGroup.previous, scroll],
   )
+  // Back/forward over jumps (outline, search, links, previews, evidence).
+  const currentPosition = useCallback((): ReadingPosition => {
+    let y: number | undefined
+    try {
+      y = scroll?.getMetrics().pageVisibilityMetrics.find((item) => item.pageNumber === currentPage)
+        ?.original.pageY
+    } catch {}
+    return y !== undefined && y > 1 ? { page: currentPage, y } : { page: currentPage }
+  }, [currentPage, scroll])
+  const scrollToPosition = useCallback(
+    (position: ReadingPosition) =>
+      scroll?.scrollToPage({
+        pageNumber: clampPage(position.page, scrollState.totalPages),
+        behavior: "instant",
+        ...(position.y !== undefined
+          ? { pageCoordinates: { x: 0, y: position.y }, alignX: 0, alignY: 0 }
+          : {}),
+      }),
+    [scroll, scrollState.totalPages],
+  )
+  const jumpTo = useCallback(
+    (to: ReadingPosition, request?: Parameters<NonNullable<typeof scroll>["scrollToPage"]>[0]) => {
+      if (!scroll) return
+      setHistory((value) => recordJump(value, currentPosition(), to))
+      if (request) scroll.scrollToPage(request)
+      else
+        scroll.scrollToPage({
+          pageNumber: clampPage(to.page, scrollState.totalPages),
+          behavior: "instant",
+          ...(to.y !== undefined ? { pageCoordinates: { x: 0, y: to.y }, alignX: 0, alignY: 8 } : {}),
+        })
+    },
+    [currentPosition, scroll, scrollState.totalPages],
+  )
+  const jumpRef = useRef(jumpTo)
+  jumpRef.current = jumpTo
+  const navigateBack = useCallback(() => {
+    const step = goBack(history, currentPosition())
+    if (!step) return
+    setHistory(step.history)
+    scrollToPosition(step.target)
+  }, [currentPosition, history, scrollToPosition])
+  const navigateForward = useCallback(() => {
+    const step = goForward(history, currentPosition())
+    if (!step) return
+    setHistory(step.history)
+    scrollToPosition(step.target)
+  }, [currentPosition, history, scrollToPosition])
+
+  // Links and figure/table/citation references, with hover previews.
+  const referenceIndex = useMemo(
+    () =>
+      new ReferenceIndex(registry, documentId, async () => {
+        const { rpc } = await import("../../../rpc")
+        return rpc.request["pdf.referenceTargets"]({ documentId: source.documentId })
+      }),
+    [documentId, registry, source.documentId],
+  )
+  useEffect(() => {
+    if (!source.documentHash) return
+    void referenceIndex.refreshTargets()
+    let timer: number | undefined
+    const indexed = () => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => void referenceIndex.refreshTargets(), 800)
+    }
+    window.addEventListener("pdfie:index-updated", indexed)
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener("pdfie:index-updated", indexed)
+    }
+  }, [referenceIndex, source.documentHash])
+  useEffect(() => () => referenceIndex.close(), [referenceIndex])
+  const [preview, setPreview] = useState<ReferenceHover | null>(null)
+  const previewTimers = useRef<{ show?: number; hide?: number }>({})
+  const hoverReference = useCallback((hover: ReferenceHover | null) => {
+    const timers = previewTimers.current
+    window.clearTimeout(timers.show)
+    if (hover) {
+      window.clearTimeout(timers.hide)
+      timers.show = window.setTimeout(() => setPreview(hover), 280)
+    } else timers.hide = window.setTimeout(() => setPreview(null), 220)
+  }, [])
+  useEffect(() => {
+    const timers = previewTimers.current
+    return () => {
+      window.clearTimeout(timers.show)
+      window.clearTimeout(timers.hide)
+    }
+  }, [])
+  const followReference = useCallback(
+    (reference: PageReference) => {
+      window.clearTimeout(previewTimers.current.show)
+      setPreview(null)
+      if (reference.type === "external-link") {
+        void import("../../../rpc").then(({ rpc }) =>
+          rpc.request["app.openExternal"]({ url: reference.url }).then(({ opened }) => {
+            if (!opened) setActionError("이 링크는 열 수 없습니다.")
+          }),
+        )
+        return
+      }
+      const document = documentState?.document
+      const mention = reference.mention
+      const [target] = mention ? resolveMention(mention, referenceIndex.targets) : []
+      const size = target ? document?.pages[target.pageIndex]?.size : undefined
+      if (target && size) {
+        const region = previewRegion(target, size)
+        jumpTo({ page: target.pageIndex + 1, y: region.y })
+      } else if (reference.type === "internal-link") {
+        jumpTo({ page: reference.pageIndex + 1, ...(reference.y !== undefined ? { y: reference.y } : {}) })
+      } else setActionError("아직 이 참조의 위치를 찾지 못했습니다. 문서 분석이 끝나면 다시 시도하세요.")
+    },
+    [documentState?.document, jumpTo, referenceIndex],
+  )
+
   const restoredViewApplied = useRef(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const searchResultsRef = useRef<HTMLDivElement>(null)
@@ -386,19 +516,22 @@ function ReaderChrome({
       return
     }
     handledReveal.current = revealRequest.id
-    setReturnPage((old) => old ?? currentPage)
+    setEvidenceNotice(true)
     setEvidence(ref)
     const rect = ref.rects[0]
-    scroll.scrollToPage({
-      pageNumber: ref.pageIndex + 1,
-      behavior: "instant",
-      ...(rect
-        ? { pageCoordinates: { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }, alignY: 35 }
-        : {}),
-    })
+    jumpRef.current(
+      { page: ref.pageIndex + 1, ...(rect ? { y: rect.y } : {}) },
+      {
+        pageNumber: ref.pageIndex + 1,
+        behavior: "instant",
+        ...(rect
+          ? { pageCoordinates: { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }, alignY: 35 }
+          : {}),
+      },
+    )
     if (ref.precision === "page-only")
       setActionError("정확한 위치를 찾지 못했습니다. 해당 페이지와 원문 발췌를 확인하세요.")
-  }, [revealRequest, scroll, source.documentHash, currentPage])
+  }, [revealRequest, scroll, source.documentHash])
 
   useEffect(() => {
     if (!outlineLoaded || !scrollState.totalPages) return
@@ -523,8 +656,11 @@ function ReaderChrome({
   }, [railMode, railOpen])
 
   const scrollToSearchResult = useCallback(
-    (result: SearchResult) => scroll?.scrollToPage(getSearchResultScrollTarget(result)),
-    [scroll],
+    (result: SearchResult) => {
+      const target = getSearchResultScrollTarget(result)
+      jumpTo({ page: target.pageNumber, y: result.rects[0]?.origin.y }, target)
+    },
+    [jumpTo],
   )
 
   const activateSearchResult = useCallback(
@@ -674,6 +810,12 @@ function ReaderChrome({
         event.preventDefault()
         setRailOpen((value) => !value)
       }
+      if (mod && !event.shiftKey && (event.code === "BracketLeft" || event.code === "BracketRight")) {
+        event.preventDefault()
+        if (event.code === "BracketLeft") navigateBack()
+        else navigateForward()
+        return
+      }
       if (mod && event.key === "=") {
         event.preventDefault()
         zoom?.zoomIn()
@@ -748,7 +890,21 @@ function ReaderChrome({
     speech.stop,
     chrome.focusMode,
     chrome.onToggleFocus,
+    navigateBack,
+    navigateForward,
   ])
+
+  // Mouse back/forward buttons.
+  useEffect(() => {
+    const mouseup = (event: MouseEvent) => {
+      if (event.button !== 3 && event.button !== 4) return
+      event.preventDefault()
+      if (event.button === 3) navigateBack()
+      else navigateForward()
+    }
+    window.addEventListener("mouseup", mouseup)
+    return () => window.removeEventListener("mouseup", mouseup)
+  }, [navigateBack, navigateForward])
 
   const renderPage = (page: PageLayout) => (
     <div
@@ -779,6 +935,14 @@ function ReaderChrome({
             evidence={evidence}
             pageIndex={page.pageIndex}
             scale={zoomState.currentZoomLevel}
+          />
+          <ReferenceLayer
+            documentId={documentId}
+            pageIndex={page.pageIndex}
+            scale={zoomState.currentZoomLevel}
+            index={referenceIndex}
+            onHover={hoverReference}
+            onActivate={followReference}
           />
           <CleanSelectionLayer
             documentId={documentId}
@@ -955,9 +1119,9 @@ function ReaderChrome({
         </header>
       )}
 
-      {(returnPage !== null || previousHighlights || actionError || speech.reading) && (
+      {(evidenceNotice || previousHighlights || actionError || speech.reading) && (
         <div className="reader-notices">
-          {returnPage !== null && (
+          {evidenceNotice && (
             <div className="reader-notice" role="status">
               <span>근거 확인 · p. {(evidence?.pageIndex ?? 0) + 1}</span>
               <Button
@@ -966,8 +1130,8 @@ function ReaderChrome({
                 label="읽던 페이지로"
                 icon={<Undo2 size={13} />}
                 onClick={() => {
-                  scroll?.scrollToPage({ pageNumber: returnPage, behavior: "instant" })
-                  setReturnPage(null)
+                  navigateBack()
+                  setEvidenceNotice(false)
                   setEvidence(null)
                 }}
               />
@@ -1046,7 +1210,7 @@ function ReaderChrome({
               <HighlightsPanel
                 highlights={highlights}
                 onChange={updateHighlights}
-                onNavigate={(pageNumber) => scroll?.scrollToPage({ pageNumber, behavior: "instant" })}
+                onNavigate={(pageNumber) => jumpTo({ page: pageNumber })}
               />
             ) : railMode === "search" ? (
               <section className="search-panel" aria-label="PDF 검색 결과">
@@ -1137,10 +1301,7 @@ function ReaderChrome({
               </section>
             ) : outline.length ? (
               <nav className="outline-panel" aria-label="PDF 목차">
-                <OutlineTree
-                  nodes={outline}
-                  onNavigate={(page) => scroll?.scrollToPage({ pageNumber: page, behavior: "smooth" })}
-                />
+                <OutlineTree nodes={outline} onNavigate={(page) => jumpTo({ page })} />
               </nav>
             ) : (
               <div className="rail-empty">
@@ -1255,6 +1416,26 @@ function ReaderChrome({
               <Minus size={16} />
             </IconButton>
             <span className="dock-rule" aria-hidden="true" />
+            <IconButton
+              label="뒤로"
+              shortcut="⌘["
+              size="sm"
+              className="dock-button"
+              onClick={navigateBack}
+              disabled={!history.back.length}
+            >
+              <ArrowLeft size={16} />
+            </IconButton>
+            <IconButton
+              label="앞으로"
+              shortcut="⌘]"
+              size="sm"
+              className="dock-button"
+              onClick={navigateForward}
+              disabled={!history.forward.length}
+            >
+              <ArrowRight size={16} />
+            </IconButton>
             <label className="dock-page">
               <span className="sr-only">현재 페이지</span>
               <input
@@ -1267,11 +1448,7 @@ function ReaderChrome({
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
                     event.preventDefault()
-                    if (pageDraft)
-                      scroll?.scrollToPage({
-                        pageNumber: clampPage(Number(pageDraft), scrollState.totalPages),
-                        behavior: "instant",
-                      })
+                    if (pageDraft) jumpTo({ page: clampPage(Number(pageDraft), scrollState.totalPages) })
                     event.currentTarget.blur()
                   }
                   if (event.key === "Escape") event.currentTarget.blur()
@@ -1298,6 +1475,17 @@ function ReaderChrome({
               <ChevronDown size={16} />
             </IconButton>
           </nav>
+          {preview && (
+            <ReferencePreview
+              hover={preview}
+              index={referenceIndex}
+              registry={registry}
+              sdkDocumentId={documentId}
+              onEnter={() => window.clearTimeout(previewTimers.current.hide)}
+              onLeave={() => hoverReference(null)}
+              onActivate={() => followReference(preview.reference)}
+            />
+          )}
           {chrome.focusMode && <div className={`focus-drag-strip ${DRAG}`} aria-hidden="true" />}
           {chrome.focusMode && (
             <Button
