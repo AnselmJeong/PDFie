@@ -46,6 +46,8 @@ export function App() {
     rotation: 0,
     highlights: [],
     marks: [],
+    layout: "paged",
+    crop: { enabled: false, adjust: 0 },
   })
   const [lateRestore, setLateRestore] = useState<LateRestore | null>(null)
   const openingRef = useRef(false)
@@ -330,10 +332,14 @@ export function App() {
               setChatOpen(true)
             }}
             lateRestore={lateRestore}
-            onAnnotationsChange={(patch) => {
+            onStateChange={(patch) => {
               if (!source.documentHash) return
               void rpc.request["pdf.saveState"]({ documentHash: source.documentHash, ...patch }).catch(() =>
-                setError("하이라이트와 주석을 저장하지 못했습니다. 앱을 닫기 전에 다시 시도해 주세요."),
+                setError(
+                  patch.highlights || patch.marks
+                    ? "하이라이트와 주석을 저장하지 못했습니다. 앱을 닫기 전에 다시 시도해 주세요."
+                    : "보기 설정을 저장하지 못했습니다.",
+                ),
               )
             }}
             onStatusChange={setStatus}

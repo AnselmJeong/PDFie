@@ -80,7 +80,15 @@ function restorePdf(source: ReturnType<PdfSourceBridge["getSource"]>): PdfOpenRe
   if (!source.documentHash)
     return {
       source,
-      restored: { currentPage: 1, zoom: 0, rotation: 0, highlights: [], marks: [] },
+      restored: {
+        currentPage: 1,
+        zoom: 0,
+        rotation: 0,
+        highlights: [],
+        marks: [],
+        layout: "paged",
+        crop: { enabled: false, adjust: 0 },
+      },
       persistedType: { documentType: "unknown", source: "auto" },
     }
   library.remember(source.documentHash, source.fileName, sourceBridge.persistentPath(source.documentId))
@@ -93,6 +101,8 @@ function restorePdf(source: ReturnType<PdfSourceBridge["getSource"]>): PdfOpenRe
       rotation: persisted.rotation,
       highlights: persisted.highlights,
       marks: persisted.marks,
+      layout: persisted.layout,
+      crop: persisted.crop,
     },
     persistedType: {
       documentType: persisted.documentType,

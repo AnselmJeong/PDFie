@@ -7,6 +7,7 @@ import {
 } from "@embedpdf/plugin-viewport/react"
 import { useZoomPlugin } from "@embedpdf/plugin-zoom/react"
 import { type ReactNode, useLayoutEffect, useRef, useState } from "react"
+import type { CropInsets } from "./auto-crop"
 import { calculateFitZoom, type FitMode, resolveViewportZoom } from "./fit-zoom"
 import { createWheelPageNavigation } from "./wheel-navigation"
 
@@ -18,6 +19,7 @@ export function PaginatedViewport({
   documentId,
   initialPage,
   fitMode,
+  crop,
   onManualZoom,
   onPageChange,
   onNavigatePage,
@@ -26,6 +28,8 @@ export function PaginatedViewport({
   documentId: string
   initialPage: number
   fitMode: FitMode | null
+  /** Margins to hide around the spread (outer margins only for two pages). */
+  crop: CropInsets | null
   onManualZoom: () => void
   onNavigatePage: (direction: -1 | 1) => void
   onPageChange: (page: number) => void
@@ -51,6 +55,16 @@ export function PaginatedViewport({
   const item =
     layout?.virtualItems.find((item) => item.pageNumbers.includes(pageNumber)) ?? layout?.virtualItems[0]
   const contentWidth = (item?.width ?? 0) * scale
+  // Cropping hides the spread's outer margins; coordinates stay the SDK's.
+  const firstPage = item?.pageLayouts[0]
+  const lastPage = item?.pageLayouts.at(-1)
+  const tallest = item ? Math.max(0, ...item.pageLayouts.map((page) => page.rotatedHeight)) : 0
+  const insetLeft = crop && firstPage ? crop.left * firstPage.rotatedWidth : 0
+  const insetRight = crop && lastPage ? crop.right * lastPage.rotatedWidth : 0
+  const insetTop = crop ? crop.top * tallest : 0
+  const insetBottom = crop ? crop.bottom * tallest : 0
+  const visibleWidth = Math.max(1, (item?.width ?? 0) - insetLeft - insetRight)
+  const visibleHeight = Math.max(1, (item?.height ?? 0) - insetTop - insetBottom)
   const documentWidth = (layout?.totalContentSize.width ?? 0) * scale
   const contentHeight = (layout?.totalContentSize.height ?? 0) * scale
   const gap = viewportPlugin?.provides().getViewportGap() ?? 16
@@ -129,10 +143,10 @@ export function PaginatedViewport({
     const report = () => {
       // Wait for React to mount the target spread before applying its offset.
       if (!item.pageNumbers.includes(pageRef.current)) return
-      const centerY = Math.max(0, (container.clientHeight - gap * 2 - item.height * scale) / 2)
-      const offsetY = item.y * scale - centerY
-      const centerX = Math.max(0, (container.clientWidth - gap * 2 - contentWidth) / 2)
-      const offsetX = (documentWidth - contentWidth) / 2 - centerX
+      const centerY = Math.max(0, (container.clientHeight - gap * 2 - visibleHeight * scale) / 2)
+      const offsetY = (item.y + insetTop) * scale - centerY
+      const centerX = Math.max(0, (container.clientWidth - gap * 2 - visibleWidth * scale) / 2)
+      const offsetX = (documentWidth - contentWidth) / 2 + insetLeft * scale - centerX
       const requested = pendingScroll.current
       if (requested) {
         pendingScroll.current = null
@@ -178,7 +192,7 @@ export function PaginatedViewport({
         fitZoom: fitMode
           ? calculateFitZoom(
               fitMode,
-              item,
+              { width: visibleWidth, height: visibleHeight },
               { width: container.clientWidth, height: container.clientHeight },
               gap,
             )
@@ -193,11 +207,14 @@ export function PaginatedViewport({
         zoom.requestZoom(target)
         // Initial and fit zoom start at the top and left of the visible spread. Its
         // centering margins are added by the viewport, not the document layout.
-        const centerY = Math.max(0, (container.clientHeight - gap * 2 - item.height * target) / 2)
-        const centerX = Math.max(0, (container.clientWidth - gap * 2 - item.width * target) / 2)
+        const centerY = Math.max(0, (container.clientHeight - gap * 2 - visibleHeight * target) / 2)
+        const centerX = Math.max(0, (container.clientWidth - gap * 2 - visibleWidth * target) / 2)
         pendingScroll.current = {
-          x: (((layout?.totalContentSize.width ?? item.width) - item.width) * target) / 2 - centerX,
-          y: item.y * target - centerY,
+          x:
+            (((layout?.totalContentSize.width ?? item.width) - item.width) * target) / 2 +
+            insetLeft * target -
+            centerX,
+          y: (item.y + insetTop) * target - centerY,
         }
       } finally {
         applyingFit.current = false
@@ -223,6 +240,10 @@ export function PaginatedViewport({
     contentHeight,
     contentWidth,
     documentWidth,
+    insetLeft,
+    insetTop,
+    visibleHeight,
+    visibleWidth,
     fitMode,
     layout,
     zoomPlugin,
@@ -240,27 +261,41 @@ export function PaginatedViewport({
     <ViewportElementContext.Provider value={containerRef as React.RefObject<HTMLDivElement>}>
       <div ref={containerRef} className="pdf-viewport pdf-paginated-viewport" style={{ padding: gap }}>
         {!gated && item && (
-          <div className="pdf-spread" style={{ width: contentWidth, height: item.height * scale }}>
-            {item.pageLayouts.map((page) => (
-              <div
-                key={page.pageIndex}
-                style={{
-                  position: "absolute",
-                  left: page.x * scale,
-                  top: page.y * scale,
-                  width: page.rotatedWidth * scale,
-                  height: page.rotatedHeight * scale,
-                }}
-              >
-                {renderPage({
-                  ...page,
-                  width: page.width * scale,
-                  height: page.height * scale,
-                  rotatedWidth: page.rotatedWidth * scale,
-                  rotatedHeight: page.rotatedHeight * scale,
-                })}
-              </div>
-            ))}
+          <div
+            className="pdf-spread"
+            data-cropped={crop ? "" : undefined}
+            style={{ width: visibleWidth * scale, height: visibleHeight * scale }}
+          >
+            <div
+              className="pdf-spread-content"
+              style={{
+                left: -insetLeft * scale,
+                top: -insetTop * scale,
+                width: contentWidth,
+                height: item.height * scale,
+              }}
+            >
+              {item.pageLayouts.map((page) => (
+                <div
+                  key={page.pageIndex}
+                  style={{
+                    position: "absolute",
+                    left: page.x * scale,
+                    top: page.y * scale,
+                    width: page.rotatedWidth * scale,
+                    height: page.rotatedHeight * scale,
+                  }}
+                >
+                  {renderPage({
+                    ...page,
+                    width: page.width * scale,
+                    height: page.height * scale,
+                    rotatedWidth: page.rotatedWidth * scale,
+                    rotatedHeight: page.rotatedHeight * scale,
+                  })}
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

@@ -50,6 +50,14 @@ export interface PdfMark {
   annotation: Record<string, unknown>
 }
 
+export type PdfReaderLayout = "paged" | "continuous"
+
+/** Margin cropping: on/off and the reader's adjustment to the detected crop (fraction of the page). */
+export interface PdfCropSetting {
+  enabled: boolean
+  adjust: number
+}
+
 export interface PdfViewerSource {
   documentId: string
   transport: "loopback-range"
@@ -79,6 +87,8 @@ export interface PdfOpenResult {
     rotation: number
     highlights: PdfTextHighlight[]
     marks: PdfMark[]
+    layout: PdfReaderLayout
+    crop: PdfCropSetting
   }
   persistedType: { documentType: DocumentType; source: DocumentTypeSource }
 }

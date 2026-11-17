@@ -1,6 +1,6 @@
 import type { RPCSchema } from "electrobun/bun"
 import type { AiSettingsStatus, AppearanceMode } from "../../bun/ai/ai-settings-repository"
-import type { PdfMark, PdfOpenResult, PdfTextHighlight } from "../pdf/domain"
+import type { PdfCropSetting, PdfMark, PdfOpenResult, PdfReaderLayout, PdfTextHighlight } from "../pdf/domain"
 import type { ReferenceTarget } from "../pdf/reference-links"
 import type {
   CaptureAsset,
@@ -150,6 +150,8 @@ export type AppRPC = {
           rotation?: number
           highlights?: PdfTextHighlight[]
           marks?: PdfMark[]
+          layout?: PdfReaderLayout
+          crop?: PdfCropSetting
           documentType?: "article" | "book" | "unknown"
           documentTypeSource?: "auto" | "user"
         }

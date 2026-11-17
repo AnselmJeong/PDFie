@@ -40,12 +40,15 @@ import {
   ChevronRight,
   ChevronUp,
   Columns2,
+  Crop,
   Download,
   Ellipsis,
   Focus,
   Highlighter,
   LibraryBig,
   ListTree,
+  Maximize2,
+  Minimize2,
   Minus,
   PanelLeftClose,
   PanelLeftOpen,
@@ -63,10 +66,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { type ClassificationResult, classifyPdfDocument } from "../../../../../shared/pdf/classification"
 import type {
   DocumentType,
+  PdfCropSetting,
   PdfHighlightStyle,
   PdfMark,
   PdfOpenResult,
   PdfOutlineNode,
+  PdfReaderLayout,
   PdfSelection,
   PdfTextHighlight,
   PdfViewerSource,
@@ -83,8 +88,10 @@ import { previewRegion, resolveMention } from "../../../../../shared/pdf/referen
 import { toPdfSelection } from "../../../../../shared/pdf/selection"
 import type { CaptureAsset, EvidenceRef } from "../../../../../shared/study/contracts"
 import { DRAG, NO_DRAG } from "../../../window-chrome"
+import { adjustInsets, type CropInsets, detectCrop } from "./auto-crop"
 import { CaptureOverlay } from "./CaptureOverlay"
 import { CleanSelectionLayer } from "./CleanSelectionLayer"
+import { ContinuousViewport } from "./ContinuousViewport"
 import { EvidenceOverlay } from "./EvidenceOverlay"
 import { createPdfPlugins } from "./embedpdf-plugins"
 import { collectPdfFastFacts } from "./fast-facts"
@@ -112,7 +119,13 @@ interface EmbedPdfWorkspaceProps {
   onClose: () => void
   onSelectionChange: (selection: PdfSelection | null) => void
   onSelectionAiRequest: (request: SelectionAiRequest) => void
-  onAnnotationsChange: (patch: { highlights?: PdfTextHighlight[]; marks?: PdfMark[] }) => void
+  /** Saved per document once its hash is known (annotations, layout, margin crop). */
+  onStateChange: (patch: {
+    highlights?: PdfTextHighlight[]
+    marks?: PdfMark[]
+    layout?: PdfReaderLayout
+    crop?: PdfCropSetting
+  }) => void
   onStatusChange: (status: ReaderStatus) => void
   onClassificationChange: (classification: ClassificationResult) => void
   chrome: ReaderChromeControls
@@ -301,7 +314,7 @@ function ReaderChrome({
   onClose,
   onSelectionChange,
   onSelectionAiRequest,
-  onAnnotationsChange,
+  onStateChange,
   lateRestore,
   onStatusChange,
   onClassificationChange,
@@ -338,6 +351,11 @@ function ReaderChrome({
   const [fitMode, setFitMode] = useState<FitMode | null>(initialView.zoom > 0 ? null : "fit-page")
   const clearFitMode = useCallback(() => setFitMode(null), [])
   const [spreadPage, setSpreadPage] = useState(initialView.currentPage || 1)
+  const [layoutMode, setLayoutMode] = useState<PdfReaderLayout>(initialView.layout ?? "paged")
+  const [cropSetting, setCropSetting] = useState<PdfCropSetting>(
+    initialView.crop ?? { enabled: false, adjust: 0 },
+  )
+  const [detectedCrop, setDetectedCrop] = useState<CropInsets | null>(null)
   const documentState = useDocumentState(documentId)
   const currentPage = clampPage(spreadPage, scrollState.totalPages)
   const pageGroup = getPageGroup(currentPage, scrollState.totalPages, spreadMode !== SpreadMode.None)
@@ -465,6 +483,55 @@ function ReaderChrome({
     [documentState?.document, jumpTo, referenceIndex],
   )
 
+  // In continuous mode the scroll plugin knows the page in view.
+  useEffect(() => {
+    if (layoutMode === "continuous" && scrollState.currentPage) setSpreadPage(scrollState.currentPage)
+  }, [layoutMode, scrollState.currentPage])
+
+  // Margin cropping: detect once per document, then apply the reader's adjustment.
+  useEffect(() => {
+    if (!cropSetting.enabled || detectedCrop || !scrollState.totalPages) return
+    const signal = { cancelled: false }
+    void detectCrop(registry, documentId, signal)
+      .then((insets) => {
+        if (!signal.cancelled) setDetectedCrop(insets)
+      })
+      .catch(() => {
+        if (!signal.cancelled) setActionError("여백을 감지하지 못했습니다.")
+      })
+    return () => {
+      signal.cancelled = true
+    }
+  }, [cropSetting.enabled, detectedCrop, documentId, registry, scrollState.totalPages])
+  const crop = useMemo(
+    () =>
+      cropSetting.enabled && detectedCrop && rotation === 0
+        ? adjustInsets(detectedCrop, cropSetting.adjust)
+        : null,
+    [cropSetting, detectedCrop, rotation],
+  )
+  const changeCrop = useCallback(
+    (next: PdfCropSetting) => {
+      setCropSetting(next)
+      onStateChange({ crop: next })
+      setFitMode((mode) => mode ?? "fit-width")
+    },
+    [onStateChange],
+  )
+  const changeLayout = useCallback(
+    (next: PdfReaderLayout) => {
+      if (next === layoutMode) return
+      const page = currentPage
+      setLayoutMode(next)
+      onStateChange({ layout: next })
+      setFitMode(next === "continuous" ? "fit-width" : "fit-page")
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => scroll?.scrollToPage({ pageNumber: page, behavior: "instant" })),
+      )
+    },
+    [currentPage, layoutMode, onStateChange, scroll],
+  )
+
   const restoredViewApplied = useRef(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const searchResultsRef = useRef<HTMLDivElement>(null)
@@ -498,6 +565,8 @@ function ReaderChrome({
     const view = lateRestore.view
     setHighlights(view.highlights)
     setPreviousHighlights(null)
+    if (view.layout && view.layout !== "paged") setLayoutMode(view.layout)
+    if (view.crop?.enabled) setCropSetting(view.crop)
     if (currentPage !== 1 || rotation !== 0) return
     if ([Rotation.Degree90, Rotation.Degree180, Rotation.Degree270].includes(view.rotation))
       rotate.setRotation(view.rotation as Rotation)
@@ -752,9 +821,9 @@ function ReaderChrome({
     (next: PdfTextHighlight[]) => {
       setPreviousHighlights(highlights)
       setHighlights(next)
-      onAnnotationsChange({ highlights: next })
+      onStateChange({ highlights: next })
     },
-    [highlights, onAnnotationsChange],
+    [highlights, onStateChange],
   )
 
   const highlightPages =
@@ -1148,7 +1217,7 @@ function ReaderChrome({
                 icon={<Undo2 size={13} />}
                 onClick={() => {
                   setHighlights(previousHighlights)
-                  onAnnotationsChange({ highlights: previousHighlights })
+                  onStateChange({ highlights: previousHighlights })
                   setPreviousHighlights(null)
                 }}
               />
@@ -1313,15 +1382,26 @@ function ReaderChrome({
         )}
 
         <main className="pdf-surface">
-          <PaginatedViewport
-            documentId={documentId}
-            initialPage={spreadPage}
-            fitMode={fitMode}
-            onManualZoom={clearFitMode}
-            onPageChange={setSpreadPage}
-            onNavigatePage={navigatePage}
-            renderPage={renderPage}
-          />
+          {layoutMode === "continuous" ? (
+            <ContinuousViewport
+              documentId={documentId}
+              fitMode={fitMode}
+              crop={crop}
+              onManualZoom={clearFitMode}
+              renderPage={renderPage}
+            />
+          ) : (
+            <PaginatedViewport
+              documentId={documentId}
+              initialPage={spreadPage}
+              fitMode={fitMode}
+              crop={crop}
+              onManualZoom={clearFitMode}
+              onPageChange={setSpreadPage}
+              onNavigatePage={navigatePage}
+              renderPage={renderPage}
+            />
+          )}
           <nav className="page-dock" aria-label="페이지와 확대/축소">
             <DropdownMenu
               placement="end"
@@ -1356,6 +1436,48 @@ function ReaderChrome({
                 <DropdownMenuRadioItem value="single" label="한 페이지 보기" />
                 <DropdownMenuRadioItem value="spread" label="두 페이지 보기" />
               </DropdownMenuRadioGroup>
+              <DropdownMenuDivider />
+              <DropdownMenuRadioGroup
+                label="넘기기"
+                value={layoutMode}
+                onChange={(value) => changeLayout(value as PdfReaderLayout)}
+              >
+                <DropdownMenuRadioItem value="paged" label="페이지 단위" />
+                <DropdownMenuRadioItem value="continuous" label="연속 스크롤" />
+              </DropdownMenuRadioGroup>
+              <DropdownMenuDivider />
+              <DropdownMenuGroup title="여백">
+                <DropdownMenuCheckboxItem
+                  label="여백 자동 자르기"
+                  icon={Crop}
+                  value={cropSetting.enabled}
+                  onChange={() => changeCrop({ ...cropSetting, enabled: !cropSetting.enabled })}
+                />
+                <DropdownMenuItem
+                  label="더 자르기"
+                  icon={Minimize2}
+                  hasCloseOnSelect={false}
+                  isDisabled={!cropSetting.enabled || cropSetting.adjust >= 0.2}
+                  onClick={() =>
+                    changeCrop({
+                      ...cropSetting,
+                      adjust: Math.min(0.2, Math.round((cropSetting.adjust + 0.01) * 100) / 100),
+                    })
+                  }
+                />
+                <DropdownMenuItem
+                  label="덜 자르기"
+                  icon={Maximize2}
+                  hasCloseOnSelect={false}
+                  isDisabled={!cropSetting.enabled || cropSetting.adjust <= -0.2}
+                  onClick={() =>
+                    changeCrop({
+                      ...cropSetting,
+                      adjust: Math.max(-0.2, Math.round((cropSetting.adjust - 0.01) * 100) / 100),
+                    })
+                  }
+                />
+              </DropdownMenuGroup>
               <DropdownMenuDivider />
               <DropdownMenuRadioGroup
                 label="크기"

@@ -1,6 +1,12 @@
 import { mkdir, readFile, rename } from "node:fs/promises"
 import { dirname } from "node:path"
-import type { DocumentType, PdfMark, PdfTextHighlight } from "../../shared/pdf/domain"
+import type {
+  DocumentType,
+  PdfCropSetting,
+  PdfMark,
+  PdfReaderLayout,
+  PdfTextHighlight,
+} from "../../shared/pdf/domain"
 
 export interface PersistedDocumentState {
   currentPage: number
@@ -8,6 +14,8 @@ export interface PersistedDocumentState {
   rotation: number
   highlights: PdfTextHighlight[]
   marks: PdfMark[]
+  layout: PdfReaderLayout
+  crop: PdfCropSetting
   documentType: DocumentType
   documentTypeSource: "auto" | "user"
   updatedAt: string
@@ -22,6 +30,8 @@ const defaultState = (): PersistedDocumentState => ({
   rotation: 0,
   highlights: [],
   marks: [],
+  layout: "paged",
+  crop: { enabled: false, adjust: 0 },
   documentType: "unknown",
   documentTypeSource: "auto",
   updatedAt: new Date(0).toISOString(),
@@ -51,6 +61,11 @@ export class DocumentStateRepository {
       ...stored,
       highlights: Array.isArray(stored.highlights) ? stored.highlights : [],
       marks: Array.isArray(stored.marks) ? stored.marks : [],
+      layout: stored.layout === "continuous" ? "continuous" : "paged",
+      crop: {
+        enabled: stored.crop?.enabled === true,
+        adjust: Number.isFinite(stored.crop?.adjust) ? Math.max(-0.2, Math.min(0.2, stored.crop.adjust)) : 0,
+      },
       // Version 1 saved FitWidth as a numeric single-page zoom. Reusing that
       // value after switching to a spread would reopen legacy documents at
       // 150–180%, so migrate once to the new two-page FitWidth default.
