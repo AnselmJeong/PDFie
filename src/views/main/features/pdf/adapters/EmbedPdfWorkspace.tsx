@@ -439,7 +439,6 @@ function ReaderChrome({
       window.removeEventListener("pdfie:index-updated", indexed)
     }
   }, [referenceIndex, source.documentHash])
-  useEffect(() => () => referenceIndex.close(), [referenceIndex])
   const [preview, setPreview] = useState<ReferenceHover | null>(null)
   const previewTimers = useRef<{ show?: number; hide?: number }>({})
   const hoverReference = useCallback((hover: ReferenceHover | null) => {

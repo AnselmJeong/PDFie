@@ -14,7 +14,6 @@ export class ReferenceIndex {
   #targets: ReferenceTarget[] = []
   #listeners = new Set<() => void>()
   #loadingTargets: Promise<void> | null = null
-  #closed = false
 
   constructor(
     private readonly registry: PluginRegistry,
@@ -31,17 +30,11 @@ export class ReferenceIndex {
     return () => this.#listeners.delete(listener)
   }
 
-  close() {
-    this.#closed = true
-    this.#listeners.clear()
-  }
-
   /** Reload captions and bibliography entries (the index grows in the background). */
   refreshTargets(): Promise<void> {
     if (this.#loadingTargets) return this.#loadingTargets
     this.#loadingTargets = this.loadTargets()
       .then((targets) => {
-        if (this.#closed) return
         this.#targets = targets
         for (const listener of this.#listeners) listener()
       })

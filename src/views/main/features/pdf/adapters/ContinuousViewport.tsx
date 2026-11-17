@@ -1,3 +1,4 @@
+import { useDocumentState } from "@embedpdf/core/react"
 import { type PageLayout, type ScrollerLayout, useScrollPlugin } from "@embedpdf/plugin-scroll/react"
 import {
   useIsViewportGated,
@@ -32,6 +33,7 @@ export function ContinuousViewport({
   const { plugin: viewportPlugin } = useViewportPlugin()
   const { plugin: zoomPlugin } = useZoomPlugin()
   const gated = useIsViewportGated(documentId)
+  const documentState = useDocumentState(documentId)
   const containerRef = useRef<HTMLDivElement>(null)
   const [layout, setLayout] = useState<ScrollerLayout | null>(null)
   const applyingFit = useRef(false)
@@ -125,12 +127,18 @@ export function ContinuousViewport({
       const zoom = zoomPlugin.provides().forDocument(documentId)
       const zoomState = zoom.getState()
       const initializing = viewportPlugin.provides().forDocument(documentId).hasGate("zoom")
-      const current = zoomState.currentZoomLevel || 1
-      const pageWidth = (widest - insetLeft - insetRight) / current
+      // Unscaled sizes from the document: the scaled layout can lag a zoom change.
+      const pages = documentState?.document?.pages ?? []
+      const turn = documentState?.rotation ?? 0
+      const size = (page: (typeof pages)[number]) =>
+        ((page.rotation ?? 0) + turn) % 2 === 1
+          ? { width: page.size.height, height: page.size.width }
+          : page.size
       const currentPage = scrollPlugin?.provides().forDocument(documentId).getCurrentPage() ?? 1
-      const pageHeight =
-        (layout.items.find((item) => item.pageNumbers.includes(currentPage))?.height ??
-          Math.max(0, ...layout.items.map((item) => item.height))) / current
+      const pageWidth =
+        Math.max(0, ...pages.map((page) => size(page).width)) * (1 - (crop?.left ?? 0) - (crop?.right ?? 0))
+      const current = pages[currentPage - 1] ?? pages[0]
+      const pageHeight = current ? size(current).height : 0
       let fitZoom: number | null = null
       if (fitMode && pageWidth > 0 && pageHeight > 0) {
         const width = (container.clientWidth - gap * 2) / pageWidth
@@ -156,18 +164,7 @@ export function ContinuousViewport({
     const observer = new ResizeObserver(applyZoom)
     observer.observe(container)
     return () => observer.disconnect()
-  }, [
-    documentId,
-    fitMode,
-    gap,
-    insetLeft,
-    insetRight,
-    layout,
-    scrollPlugin,
-    viewportPlugin,
-    widest,
-    zoomPlugin,
-  ])
+  }, [crop, documentId, documentState, fitMode, gap, layout, scrollPlugin, viewportPlugin, zoomPlugin])
 
   return (
     <ViewportElementContext.Provider value={containerRef as React.RefObject<HTMLDivElement>}>
