@@ -27,7 +27,25 @@ try {
   assert.deepEqual(reopened.get("fixture").highlights, [{ ...highlight, style: "red-underline" }])
   await reopened.save("fixture", { highlights: [] })
   assert.deepEqual((await DocumentStateRepository.open(path)).get("fixture").highlights, [])
-  console.log("Document annotation persistence and concurrent save integration: passed")
+
+  // Marks, the reading layout and margin cropping persist alongside highlights;
+  // records written before they existed read as the defaults.
+  const mark = { id: "m1", pageIndex: 0, annotation: { type: 15, id: "m1", inkList: [] } }
+  assert.deepEqual(reopened.get("fixture").marks, [])
+  assert.equal(reopened.get("fixture").layout, "paged")
+  assert.deepEqual(reopened.get("fixture").crop, { enabled: false, adjust: 0 })
+  await reopened.save("fixture", {
+    marks: [mark],
+    layout: "continuous",
+    crop: { enabled: true, adjust: 0.9 },
+  })
+  const withMarks = (await DocumentStateRepository.open(path)).get("fixture")
+  assert.deepEqual(withMarks.marks, [mark])
+  assert.equal(withMarks.layout, "continuous")
+  assert.deepEqual(withMarks.crop, { enabled: true, adjust: 0.2 })
+  console.log(
+    "Document annotation, mark, layout and crop persistence and concurrent save integration: passed",
+  )
 } finally {
   await rm(directory, { recursive: true, force: true })
 }

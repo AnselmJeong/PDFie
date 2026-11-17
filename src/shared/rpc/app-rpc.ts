@@ -135,6 +135,16 @@ export type AppRPC = {
         params: Record<string, never>
         response: { opened: PdfOpenResult[]; failed: string[] }
       }
+      /** Write a copy of the PDF with marks and highlights as standard annotations (never the original). */
+      "pdf.exportAnnotated": {
+        params: { documentId: string; highlights: PdfTextHighlight[]; marks: PdfMark[] }
+        response: { saved: boolean; path: string | null; written: number }
+      }
+      /** Write highlights, notes and marks as Markdown. */
+      "pdf.exportNotes": {
+        params: { documentId: string; highlights: PdfTextHighlight[]; marks: PdfMark[] }
+        response: { saved: boolean; path: string | null; written: number }
+      }
       /** Captions and bibliography entries found so far in the document's study index. */
       "pdf.referenceTargets": { params: { documentId: string }; response: ReferenceTarget[] }
       /** Open a web or mail link from a PDF in the default app. */

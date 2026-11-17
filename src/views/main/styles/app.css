@@ -4076,4 +4076,104 @@
       transform: translateY(2px);
     }
   }
+  /* Pen strokes, shapes and notes (EmbedPDF annotation layer) and their toolbar. */
+  .pdf-annotation-layer {
+    z-index: 7;
+  }
+  .pdf-annotation-layer[data-marks-active] {
+    z-index: 11;
+  }
+  .marks-toolbar {
+    position: absolute;
+    z-index: 40;
+    top: 12px;
+    left: 50%;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 4px 6px;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    background: var(--popover);
+    box-shadow: var(--shadow-lg);
+    transform: translateX(-50%);
+  }
+  .marks-toolbar button[aria-pressed="true"]:not(.marks-swatch) {
+    background: var(--pressed);
+  }
+  .marks-toolbar-rule {
+    width: 1px;
+    height: 18px;
+    margin: 0 4px;
+    background: var(--border-strong);
+  }
+  .marks-swatch {
+    width: 18px;
+    height: 18px;
+    margin: 0 2px;
+    padding: 0;
+    border: 2px solid var(--popover);
+    border-radius: 999px;
+    background: currentColor;
+    box-shadow: 0 0 0 1px var(--border-strong);
+    cursor: pointer;
+  }
+  .marks-swatch[aria-pressed="true"] {
+    box-shadow: 0 0 0 2px var(--foreground);
+  }
+  .marks-width {
+    display: grid;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    cursor: pointer;
+    place-items: center;
+  }
+  .marks-width span {
+    display: block;
+    width: 14px;
+    border-radius: 2px;
+    background: var(--foreground);
+  }
+  .marks-width[aria-pressed="true"] {
+    background: var(--pressed);
+  }
+  .mark-menu {
+    position: absolute;
+    left: 0;
+    padding: 2px;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: var(--popover);
+    box-shadow: var(--shadow-md);
+    pointer-events: auto;
+  }
+  .marks-list {
+    display: grid;
+    gap: 4px;
+    padding: 8px 4px;
+  }
+  .marks-list h3 {
+    margin: 4px 4px 2px;
+    color: var(--muted-foreground);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .mark-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 4px;
+    font-size: 12px;
+  }
+  .mark-row > span {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 } /* @layer app */

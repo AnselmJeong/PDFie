@@ -1,7 +1,8 @@
 import { access } from "node:fs/promises"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 import Electrobun, { BrowserView, BrowserWindow, Utils } from "electrobun/bun"
-import type { PdfOpenResult } from "../shared/pdf/domain"
+import { annotationsMarkdown, exportAnnotations } from "../shared/pdf/annotation-export"
+import type { PdfMark, PdfOpenResult, PdfTextHighlight } from "../shared/pdf/domain"
 import { safeExternalUrl } from "../shared/pdf/external-url"
 import { buildReferenceTargets } from "../shared/pdf/reference-links"
 import type { AppRPC } from "../shared/rpc/app-rpc"
@@ -11,6 +12,7 @@ import { CodexProvider } from "./ai/providers/codex-provider"
 import { OllamaProvider } from "./ai/providers/ollama-provider"
 import { installApplicationMenu } from "./app-menu"
 import { CaptureStore } from "./assets/capture-store"
+import { writeAnnotatedCopy } from "./pdf/annotated-export"
 import { backgroundIndexer } from "./pdf/background-index"
 import { PdfSourceBridge } from "./pdf/document-source-bridge"
 import { DocumentStateRepository } from "./pdf/document-state-repository"
@@ -132,21 +134,54 @@ function recordsChanged(hash: string) {
   for (const window of appWindows())
     window.webview.rpc?.proxy.send["study.records.changed"]({ documentHash: hash })
 }
-async function exportRecords(hash: string, title: string) {
-  const folder = restoreSingleSelectedPath(
+async function chooseFolder(startingFolder = Utils.paths.home) {
+  return restoreSingleSelectedPath(
     await Utils.openFileDialog({
-      startingFolder: Utils.paths.home,
+      startingFolder,
       allowedFileTypes: "",
       canChooseFiles: false,
       canChooseDirectory: true,
       allowsMultipleSelection: false,
     }),
   )
+}
+const safeFileName = (title: string, fallback: string) =>
+  Array.from(title, (char) => (char.charCodeAt(0) < 32 || "\\/:".includes(char) ? "-" : char))
+    .join("")
+    .slice(0, 160) || fallback
+/** A path in `folder` that does not exist yet: "name.ext", "name 2.ext", … */
+async function freshPath(folder: string, name: string, extension: string) {
+  for (let index = 1; index < 1000; index++) {
+    const path = join(folder, `${name}${index === 1 ? "" : ` ${index}`}.${extension}`)
+    if (!(await Bun.file(path).exists())) return path
+  }
+  return join(folder, `${name} ${Date.now()}.${extension}`)
+}
+async function exportAnnotatedPdf(documentId: string, highlights: PdfTextHighlight[], marks: PdfMark[]) {
+  const source = sourceBridge.getSource(documentId)
+  const input = sourceBridge.persistentPath(documentId)
+  if (!input) throw new Error("원본 PDF 위치를 찾지 못했습니다.")
+  const folder = await chooseFolder(dirname(input))
+  if (!folder) return { saved: false, path: null, written: 0 }
+  const name = safeFileName(source.fileName.replace(/\.pdf$/i, ""), "document")
+  const path = await freshPath(folder, `${name} (PDFie 주석)`, "pdf")
+  const result = await writeAnnotatedCopy(input, path, exportAnnotations(highlights, marks))
+  return { saved: true, path, written: result.written }
+}
+async function exportNotes(documentId: string, highlights: PdfTextHighlight[], marks: PdfMark[]) {
+  const source = sourceBridge.getSource(documentId)
+  const input = sourceBridge.persistentPath(documentId)
+  const folder = await chooseFolder(input ? dirname(input) : Utils.paths.home)
+  if (!folder) return { saved: false, path: null, written: 0 }
+  const title = source.fileName.replace(/\.pdf$/i, "")
+  const path = await freshPath(folder, `${safeFileName(title, "document")} 주석`, "md")
+  await Bun.write(path, annotationsMarkdown(title, highlights, marks))
+  return { saved: true, path, written: highlights.length + marks.length }
+}
+async function exportRecords(hash: string, title: string) {
+  const folder = await chooseFolder()
   if (!folder) return { saved: false, path: null }
-  const fileName =
-    Array.from(title, (char) => (char.charCodeAt(0) < 32 || "\\/:".includes(char) ? "-" : char))
-      .join("")
-      .slice(0, 160) || "study"
+  const fileName = safeFileName(title, "study")
   const path = join(folder, `${fileName}-study-${Date.now()}.md`)
   await Bun.write(path, exportStudyMarkdown(title, studyStore.snapshot(hash)))
   return { saved: true, path }
@@ -435,6 +470,10 @@ function createAppRpc(ownWindow: () => ZoomableWindow | null = () => null) {
         },
         "app.ping": async () => ({ ok: true as const, renderer: "native" as const }),
         "pdf.openDialog": async () => choosePdf(),
+        "pdf.exportAnnotated": async ({ documentId, highlights, marks }) =>
+          exportAnnotatedPdf(documentId, highlights, marks),
+        "pdf.exportNotes": async ({ documentId, highlights, marks }) =>
+          exportNotes(documentId, highlights, marks),
         "pdf.referenceTargets": async ({ documentId }) =>
           buildReferenceTargets(studyStore.blocks(await documentHash(documentId))),
         "app.openExternal": async ({ url }) => {

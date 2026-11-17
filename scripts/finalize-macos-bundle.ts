@@ -37,12 +37,14 @@ for (const command of [
   plistBuddy(command)
 console.log(`Declared PDFie as a PDF viewer (com.adobe.pdf) in ${plistPath}`)
 
-// Bundle the isolated import worker beside the main process; it resolves PDFium from app resources.
-const worker = await Bun.build({
-  entrypoints: ["src/bun/pdf/import-worker.ts"],
-  outdir: join(bundlePath, "Contents/Resources/app/bun"),
-  target: "bun",
-  naming: "import-worker.js",
-  minify: true,
-})
-if (!worker.success) throw new Error(worker.logs.map(String).join("\n"))
+// Bundle the isolated import and export workers beside the main process; they resolve PDFium from app resources.
+for (const name of ["import-worker", "export-worker"]) {
+  const worker = await Bun.build({
+    entrypoints: [`src/bun/pdf/${name}.ts`],
+    outdir: join(bundlePath, "Contents/Resources/app/bun"),
+    target: "bun",
+    naming: `${name}.js`,
+    minify: true,
+  })
+  if (!worker.success) throw new Error(worker.logs.map(String).join("\n"))
+}

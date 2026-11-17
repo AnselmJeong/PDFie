@@ -1,6 +1,8 @@
 import { createPluginRegistration } from "@embedpdf/core"
+import { AnnotationPluginPackage, LockModeType } from "@embedpdf/plugin-annotation/react"
 import { BookmarkPluginPackage } from "@embedpdf/plugin-bookmark/react"
 import { DocumentManagerPluginPackage } from "@embedpdf/plugin-document-manager/react"
+import { HistoryPluginPackage } from "@embedpdf/plugin-history/react"
 import { InteractionManagerPluginPackage } from "@embedpdf/plugin-interaction-manager/react"
 import { PanPluginPackage } from "@embedpdf/plugin-pan/react"
 import { RenderPluginPackage } from "@embedpdf/plugin-render/react"
@@ -68,6 +70,18 @@ export function createPdfPlugins(
       // drags appear broken unless both endpoints land precisely on glyphs.
       toleranceFactor: 0.25,
       marquee: { enabled: false },
+    }),
+    createPluginRegistration(HistoryPluginPackage),
+    // Pen strokes, shapes and notes (marks). Everything stays locked until the
+    // reader opens the mark tools, so clicks keep reaching text and links.
+    createPluginRegistration(AnnotationPluginPackage, {
+      autoCommit: true,
+      annotationAuthor: "PDFie",
+      deactivateToolAfterCreate: false,
+      selectAfterCreate: false,
+      editAfterCreate: false,
+      autoOpenLinks: false,
+      locked: { type: LockModeType.All },
     }),
   ]
 }

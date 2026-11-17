@@ -144,3 +144,40 @@ describe("external links from a PDF", async () => {
     expect(safeExternalUrl("not a url")).toBeNull()
   })
 })
+
+describe("annotation export conversion", async () => {
+  const { exportAnnotations, fitsStandardFont, highlightAnnotations } = await import(
+    "../../src/shared/pdf/annotation-export"
+  )
+  it("turns highlights into one markup annotation per page with the note", () => {
+    const [first, second] = highlightAnnotations([
+      {
+        id: "h",
+        text: "t",
+        style: "red-underline",
+        createdAt: "2026-01-01T00:00:00Z",
+        note: "n",
+        pages: [
+          { pageNumber: 2, rects: [{ x: 10, y: 20, width: 30, height: 5 }] },
+          { pageNumber: 3, rects: [{ x: 1, y: 2, width: 3, height: 4 }] },
+        ],
+      },
+    ])
+    expect(first).toMatchObject({ type: 10, pageIndex: 1, contents: "n" })
+    expect(second).toMatchObject({ type: 10, pageIndex: 2 })
+    expect(second?.contents).toBeUndefined()
+  })
+
+  it("keeps Latin text boxes and turns others into notes", () => {
+    expect(fitsStandardFont("Key result é")).toBe(true)
+    expect(fitsStandardFont("핵심")).toBe(false)
+    const box = (contents: string) => ({
+      id: contents,
+      pageIndex: 0,
+      annotation: { type: 3, contents, rect: { origin: { x: 5, y: 6 }, size: { width: 50, height: 10 } } },
+    })
+    const [latin, korean] = exportAnnotations([], [box("Note"), box("메모")])
+    expect(latin?.type).toBe(3)
+    expect(korean).toMatchObject({ type: 1, contents: "메모", rect: { origin: { x: 5, y: 6 } } })
+  })
+})

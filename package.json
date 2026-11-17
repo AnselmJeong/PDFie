@@ -22,7 +22,7 @@
     "test:viewer": "vitest run tests/golden-selection",
     "theme:build": "astryx theme build src/views/main/theme/pdfie.source.ts --out src/views/main/theme/pdfie.css",
     "theme:check": "astryx theme build src/views/main/theme/pdfie.source.ts --out src/views/main/theme/pdfie.css --check",
-    "test:reader": "bun run scripts/test-reference-links.ts"
+    "test:reader": "bun run scripts/test-reference-links.ts && bun run scripts/test-annotated-export.ts"
   },
   "dependencies": {
     "@astryxdesign/core": "0.7.11",

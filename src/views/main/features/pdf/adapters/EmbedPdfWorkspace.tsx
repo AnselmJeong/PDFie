@@ -21,6 +21,7 @@ import {
   Rotation,
   type SearchResult,
 } from "@embedpdf/models"
+import { AnnotationLayer, type AnnotationSelectionMenuRenderFn } from "@embedpdf/plugin-annotation/react"
 import { useBookmarkCapability } from "@embedpdf/plugin-bookmark/react"
 import { DocumentContent } from "@embedpdf/plugin-document-manager/react"
 import { PagePointerProvider } from "@embedpdf/plugin-interaction-manager/react"
@@ -43,6 +44,8 @@ import {
   Crop,
   Download,
   Ellipsis,
+  FileDown,
+  FileText,
   Focus,
   Highlighter,
   LibraryBig,
@@ -52,6 +55,7 @@ import {
   Minus,
   PanelLeftClose,
   PanelLeftOpen,
+  PenLine,
   Plus,
   RectangleVertical,
   RotateCw,
@@ -59,6 +63,7 @@ import {
   Settings2,
   Sparkles,
   Square,
+  Trash2,
   Undo2,
   X,
 } from "lucide-react"
@@ -97,6 +102,7 @@ import { createPdfPlugins } from "./embedpdf-plugins"
 import { collectPdfFastFacts } from "./fast-facts"
 import type { FitMode } from "./fit-zoom"
 import { HighlightsPanel } from "./HighlightsPanel"
+import { MarksToolbar } from "./MarksToolbar"
 import { PaginatedViewport } from "./PaginatedViewport"
 import { clampPage, getPageGroup } from "./page-navigation"
 import { type ReferenceHover, ReferenceLayer } from "./ReferenceLayer"
@@ -106,6 +112,7 @@ import { SelectionActions } from "./SelectionActions"
 import { getSelectedTextPreservingVisualHyphens } from "./selection-text"
 import { beginNativeAnalysis } from "./study-analysis"
 import { addOrRestyleHighlight, createHighlightPages, findSelectionHighlight } from "./text-highlights"
+import { useMarks } from "./useMarks"
 import { useSelectionSpeech } from "./useSelectionSpeech"
 
 interface EmbedPdfWorkspaceProps {
@@ -348,6 +355,8 @@ function ReaderChrome({
   const selectionRevision = useRef(0)
   const [previousHighlights, setPreviousHighlights] = useState<PdfTextHighlight[] | null>(null)
   const [highlights, setHighlights] = useState<PdfTextHighlight[]>(initialView.highlights)
+  const saveMarks = useCallback((next: PdfMark[]) => onStateChange({ marks: next }), [onStateChange])
+  const marks = useMarks({ documentId, initialMarks: initialView.marks ?? [], onChange: saveMarks })
   const [fitMode, setFitMode] = useState<FitMode | null>(initialView.zoom > 0 ? null : "fit-page")
   const clearFitMode = useCallback(() => setFitMode(null), [])
   const [spreadPage, setSpreadPage] = useState(initialView.currentPage || 1)
@@ -531,6 +540,64 @@ function ReaderChrome({
     [currentPage, layoutMode, onStateChange, scroll],
   )
 
+  const [exportNotice, setExportNotice] = useState<string | null>(null)
+  const clearSelectionRef = useRef<() => void>(() => undefined)
+  const toggleMarks = useCallback(() => {
+    if (!marks.active && !source.documentHash) {
+      setActionError(PENDING_IDENTITY_MESSAGE)
+      return
+    }
+    if (!marks.active) {
+      clearSelectionRef.current()
+      setPreview(null)
+    }
+    marks.setActive(!marks.active)
+  }, [marks, source.documentHash])
+  const exportAnnotations = useCallback(
+    async (kind: "pdf" | "markdown") => {
+      try {
+        const { rpc } = await import("../../../rpc")
+        const params = { documentId: source.documentId, highlights, marks: marks.marks }
+        const result =
+          kind === "pdf"
+            ? await rpc.request["pdf.exportAnnotated"](params)
+            : await rpc.request["pdf.exportNotes"](params)
+        if (result.saved && result.path)
+          setExportNotice(
+            kind === "pdf"
+              ? `주석 ${result.written}개를 넣은 사본을 저장했습니다: ${result.path.split("/").at(-1)}`
+              : `주석을 Markdown으로 저장했습니다: ${result.path.split("/").at(-1)}`,
+          )
+      } catch (cause) {
+        setActionError(cause instanceof Error ? cause.message : "주석을 내보내지 못했습니다.")
+      }
+    },
+    [highlights, marks.marks, source.documentId],
+  )
+  const markMenu = useCallback<AnnotationSelectionMenuRenderFn>(
+    ({ context, menuWrapperProps, rect, placement, selected }) => {
+      if (!selected || !marks.active || !marks.isOurs(context.annotation.object.id)) return null
+      return (
+        <div {...menuWrapperProps}>
+          <div
+            className="mark-menu"
+            style={{ top: placement.suggestTop ? -38 : rect.size.height + 6 }}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <Button
+              size="sm"
+              variant="ghost"
+              label="삭제"
+              icon={<Trash2 size={13} />}
+              onClick={() => marks.remove(context.pageIndex, context.annotation.object.id)}
+            />
+          </div>
+        </div>
+      )
+    },
+    [marks.active, marks.isOurs, marks.remove],
+  )
+
   const restoredViewApplied = useRef(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const searchResultsRef = useRef<HTMLDivElement>(null)
@@ -564,6 +631,7 @@ function ReaderChrome({
     const view = lateRestore.view
     setHighlights(view.highlights)
     setPreviousHighlights(null)
+    marks.importMarks(view.marks ?? [])
     if (view.layout && view.layout !== "paged") setLayoutMode(view.layout)
     if (view.crop?.enabled) setCropSetting(view.crop)
     if (currentPage !== 1 || rotation !== 0) return
@@ -575,7 +643,7 @@ function ReaderChrome({
     }
     const page = Math.min(Math.max(1, view.currentPage), scrollState.totalPages || 1)
     if (page > 1) requestAnimationFrame(() => scroll.scrollToPage({ pageNumber: page, behavior: "instant" }))
-  }, [lateRestore, scroll, rotate, zoom, currentPage, rotation, scrollState.totalPages])
+  }, [lateRestore, scroll, rotate, zoom, currentPage, rotation, scrollState.totalPages, marks.importMarks])
   useEffect(() => {
     if (!revealRequest || !scroll || handledReveal.current === revealRequest.id) return
     const ref = revealRequest.evidence
@@ -793,6 +861,7 @@ function ReaderChrome({
     setSelectionMenu(null)
     onSelectionChange(null)
   }, [documentId, onSelectionChange, selection])
+  clearSelectionRef.current = clearSelection
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: A newly displayed spread invalidates the previous selection and pending extraction.
   useEffect(() => clearSelection(), [currentPage, clearSelection])
@@ -878,6 +947,31 @@ function ReaderChrome({
         event.preventDefault()
         setRailOpen((value) => !value)
       }
+      if (
+        mod &&
+        event.code === "KeyZ" &&
+        !isEditableKeyboardTarget(event.target) &&
+        (marks.canUndo || marks.canRedo)
+      ) {
+        event.preventDefault()
+        if (event.shiftKey) marks.redo()
+        else marks.undo()
+        return
+      }
+      if (
+        marks.active &&
+        (event.key === "Delete" || event.key === "Backspace") &&
+        !isEditableKeyboardTarget(event.target) &&
+        marks.deleteSelected()
+      ) {
+        event.preventDefault()
+        return
+      }
+      if (event.key === "Escape" && marks.active && !isEditableKeyboardTarget(event.target)) {
+        event.preventDefault()
+        marks.setActive(false)
+        return
+      }
       if (mod && !event.shiftKey && (event.code === "BracketLeft" || event.code === "BracketRight")) {
         event.preventDefault()
         if (event.code === "BracketLeft") navigateBack()
@@ -960,6 +1054,7 @@ function ReaderChrome({
     chrome.onToggleFocus,
     navigateBack,
     navigateForward,
+    marks,
   ])
 
   // Mouse back/forward buttons.
@@ -998,6 +1093,15 @@ function ReaderChrome({
             pageIndex={page.pageIndex}
             scale={zoomState.currentZoomLevel}
             className="pdf-page-content-layer"
+          />
+          <AnnotationLayer
+            documentId={documentId}
+            pageIndex={page.pageIndex}
+            scale={zoomState.currentZoomLevel}
+            className="pdf-annotation-layer"
+            data-marks-active={marks.active || undefined}
+            selectionMenu={markMenu}
+            selectionOutline={{ color: "var(--ring)" }}
           />
           <EvidenceOverlay
             evidence={evidence}
@@ -1118,6 +1222,13 @@ function ReaderChrome({
               <Camera size={17} />
             </IconButton>
             <IconButton
+              label={marks.active ? "필기 끝내기" : "필기·도형"}
+              pressed={marks.active}
+              onClick={toggleMarks}
+            >
+              <PenLine size={17} />
+            </IconButton>
+            <IconButton
               label="주석 목록"
               pressed={railOpen && railMode === "highlights"}
               onClick={() => {
@@ -1173,6 +1284,16 @@ function ReaderChrome({
                 onClick={chrome.onToggleFocus}
               />
               <DropdownMenuDivider />
+              <DropdownMenuItem
+                label="주석 포함 PDF 사본 저장"
+                icon={FileDown}
+                onClick={() => void exportAnnotations("pdf")}
+              />
+              <DropdownMenuItem
+                label="주석을 Markdown으로 내보내기"
+                icon={FileText}
+                onClick={() => void exportAnnotations("markdown")}
+              />
               <DropdownMenuItem label="학습 기록 내보내기" icon={Download} onClick={chrome.onExport} />
               <DropdownMenuItem
                 label="설정"
@@ -1187,7 +1308,7 @@ function ReaderChrome({
         </header>
       )}
 
-      {(evidenceNotice || previousHighlights || actionError || speech.reading) && (
+      {(evidenceNotice || previousHighlights || actionError || speech.reading || exportNotice) && (
         <div className="reader-notices">
           {evidenceNotice && (
             <div className="reader-notice" role="status">
@@ -1226,6 +1347,18 @@ function ReaderChrome({
                 label="알림 닫기"
                 icon={<X size={13} />}
                 onClick={() => setPreviousHighlights(null)}
+              />
+            </div>
+          )}
+          {exportNotice && (
+            <div className="reader-notice" role="status">
+              <span>{exportNotice}</span>
+              <AxIconButton
+                size="sm"
+                variant="ghost"
+                label="알림 닫기"
+                icon={<X size={13} />}
+                onClick={() => setExportNotice(null)}
               />
             </div>
           )}
@@ -1277,6 +1410,8 @@ function ReaderChrome({
             {railMode === "highlights" ? (
               <HighlightsPanel
                 highlights={highlights}
+                marks={marks.marks}
+                onRemoveMark={(mark) => marks.remove(mark.pageIndex, mark.id)}
                 onChange={updateHighlights}
                 onNavigate={(pageNumber) => jumpTo({ page: pageNumber })}
               />
@@ -1596,7 +1731,22 @@ function ReaderChrome({
               <ChevronDown size={16} />
             </IconButton>
           </nav>
-          {preview && (
+          {marks.active && (
+            <MarksToolbar
+              tool={marks.tool}
+              onTool={marks.setTool}
+              color={marks.color}
+              onColor={marks.chooseColor}
+              width={marks.width}
+              onWidth={marks.setWidth}
+              canUndo={marks.canUndo}
+              canRedo={marks.canRedo}
+              onUndo={marks.undo}
+              onRedo={marks.redo}
+              onClose={() => marks.setActive(false)}
+            />
+          )}
+          {preview && !marks.active && (
             <ReferencePreview
               hover={preview}
               index={referenceIndex}
