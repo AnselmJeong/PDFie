@@ -1,6 +1,6 @@
 import type { RPCSchema } from "electrobun/bun"
 import type { AiSettingsStatus, AppearanceMode } from "../../bun/ai/ai-settings-repository"
-import type { PdfOpenResult, PdfTextHighlight } from "../pdf/domain"
+import type { PdfMark, PdfOpenResult, PdfTextHighlight } from "../pdf/domain"
 import type {
   CaptureAsset,
   IndexBeginRequest,
@@ -134,6 +134,8 @@ export type AppRPC = {
         params: Record<string, never>
         response: { opened: PdfOpenResult[]; failed: string[] }
       }
+      /** Waits for a newly seen file's hash, then returns its restored state. */
+      "pdf.identify": { params: { documentId: string }; response: PdfOpenResult }
       "pdf.close": { params: { documentId: string }; response: { closed: boolean } }
       "pdf.saveState": {
         params: {
@@ -142,6 +144,7 @@ export type AppRPC = {
           zoom?: number
           rotation?: number
           highlights?: PdfTextHighlight[]
+          marks?: PdfMark[]
           documentType?: "article" | "book" | "unknown"
           documentTypeSource?: "auto" | "user"
         }

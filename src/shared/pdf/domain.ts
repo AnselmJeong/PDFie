@@ -38,13 +38,37 @@ export interface PdfTextHighlight {
   note?: string
 }
 
+/**
+ * A pen stroke, shape, arrow or text note drawn with the mark tools. These are
+ * real PDF annotations in the open document; PDFie keeps their JSON form so it
+ * can recreate them on reopen without writing to the user's file.
+ */
+export interface PdfMark {
+  id: string
+  pageIndex: number
+  /** An EmbedPDF `PdfAnnotationObject`, JSON-safe (dates as ISO strings). */
+  annotation: Record<string, unknown>
+}
+
 export interface PdfViewerSource {
   documentId: string
   transport: "loopback-range"
   url: string
   fileName: string
-  documentHash: string
+  /**
+   * The content hash that links annotations, study records and the library.
+   * Null while a newly seen file is still being hashed in the background:
+   * nothing hash-bound may be shown or saved until `pdf.identify` returns.
+   */
+  documentHash: string | null
   sizeBytes: number
+}
+
+/** A source whose content hash is known, so hash-bound records may be shown. */
+export type IdentifiedPdfSource = PdfViewerSource & { documentHash: string }
+
+export function isIdentified(source: PdfViewerSource): source is IdentifiedPdfSource {
+  return typeof source.documentHash === "string" && source.documentHash.length > 0
 }
 
 export interface PdfOpenResult {
@@ -54,6 +78,7 @@ export interface PdfOpenResult {
     zoom: number
     rotation: number
     highlights: PdfTextHighlight[]
+    marks: PdfMark[]
   }
   persistedType: { documentType: DocumentType; source: DocumentTypeSource }
 }

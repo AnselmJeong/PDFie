@@ -1,12 +1,13 @@
 import { mkdir, readFile, rename } from "node:fs/promises"
 import { dirname } from "node:path"
-import type { DocumentType, PdfTextHighlight } from "../../shared/pdf/domain"
+import type { DocumentType, PdfMark, PdfTextHighlight } from "../../shared/pdf/domain"
 
 export interface PersistedDocumentState {
   currentPage: number
   zoom: number
   rotation: number
   highlights: PdfTextHighlight[]
+  marks: PdfMark[]
   documentType: DocumentType
   documentTypeSource: "auto" | "user"
   updatedAt: string
@@ -20,6 +21,7 @@ const defaultState = (): PersistedDocumentState => ({
   zoom: 0,
   rotation: 0,
   highlights: [],
+  marks: [],
   documentType: "unknown",
   documentTypeSource: "auto",
   updatedAt: new Date(0).toISOString(),
@@ -48,6 +50,7 @@ export class DocumentStateRepository {
       ...defaultState(),
       ...stored,
       highlights: Array.isArray(stored.highlights) ? stored.highlights : [],
+      marks: Array.isArray(stored.marks) ? stored.marks : [],
       // Version 1 saved FitWidth as a numeric single-page zoom. Reusing that
       // value after switching to a spread would reopen legacy documents at
       // 150–180%, so migrate once to the new two-page FitWidth default.

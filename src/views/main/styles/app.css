@@ -3948,4 +3948,19 @@
     align-self: flex-start;
     margin: 4px 0;
   }
+  /* A newly seen PDF is shown while its hash is computed; hash-bound panels wait. */
+  .ai-sidebar-pending {
+    width: 340px;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 24px;
+    color: var(--muted-foreground);
+    font-size: 13px;
+    text-align: center;
+  }
+  .ai-sidebar-pending p {
+    max-width: 260px;
+    margin: 0;
+  }
 } /* @layer app */

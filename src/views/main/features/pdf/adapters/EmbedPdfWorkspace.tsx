@@ -62,6 +62,8 @@ import { type ClassificationResult, classifyPdfDocument } from "../../../../../s
 import type {
   DocumentType,
   PdfHighlightStyle,
+  PdfMark,
+  PdfOpenResult,
   PdfOutlineNode,
   PdfSelection,
   PdfTextHighlight,
@@ -91,20 +93,24 @@ interface EmbedPdfWorkspaceProps {
   captureRequest: string | null
   onCapture: (capture: CaptureAsset) => void
   source: PdfViewerSource
-  initialView: {
-    currentPage: number
-    zoom: number
-    rotation: number
-    highlights: PdfTextHighlight[]
-  }
+  initialView: PdfOpenResult["restored"]
+  /** Saved state that arrived after the file was shown (its hash was pending). */
+  lateRestore: LateRestore | null
   onClose: () => void
   onSelectionChange: (selection: PdfSelection | null) => void
   onSelectionAiRequest: (request: SelectionAiRequest) => void
-  onHighlightsChange: (highlights: PdfTextHighlight[]) => void
+  onAnnotationsChange: (patch: { highlights?: PdfTextHighlight[]; marks?: PdfMark[] }) => void
   onStatusChange: (status: ReaderStatus) => void
   onClassificationChange: (classification: ClassificationResult) => void
   chrome: ReaderChromeControls
 }
+
+export interface LateRestore {
+  id: string
+  view: PdfOpenResult["restored"]
+}
+
+const PENDING_IDENTITY_MESSAGE = "처음 여는 PDF를 확인하고 있습니다. 잠시 후 다시 시도하세요."
 
 /** App-level controls the reader's title bar and page dock expose. */
 export interface ReaderChromeControls {
@@ -282,14 +288,16 @@ function ReaderChrome({
   onClose,
   onSelectionChange,
   onSelectionAiRequest,
-  onHighlightsChange,
+  onAnnotationsChange,
+  lateRestore,
   onStatusChange,
   onClassificationChange,
   revealRequest,
   captureRequest,
   onCapture,
   chrome,
-}: EmbedPdfWorkspaceProps & { documentId: string; registry: PluginRegistry }) {
+  openedAt,
+}: EmbedPdfWorkspaceProps & { documentId: string; registry: PluginRegistry; openedAt: number }) {
   const [evidence, setEvidence] = useState<EvidenceRef | null>(null)
   const [returnPage, setReturnPage] = useState<number | null>(null)
   const [captureMode, setCaptureMode] = useState(false)
@@ -335,6 +343,41 @@ function ReaderChrome({
   useEffect(() => {
     if (captureRequest) setCaptureMode(true)
   }, [captureRequest])
+
+  // Open-time measurement: engine start, range loading and first layout.
+  const reportedOpen = useRef(false)
+  useEffect(() => {
+    if (reportedOpen.current || !scrollState.totalPages) return
+    reportedOpen.current = true
+    const elapsed = Math.round(performance.now() - openedAt)
+    void import("../../../rpc").then(({ rpc }) =>
+      rpc.send["app.log"]({
+        level: "info",
+        message: `[open] ${source.fileName}: ${scrollState.totalPages} pages, first page ready in ${elapsed} ms${source.documentHash ? "" : " (hash pending)"}`,
+      }),
+    )
+  }, [openedAt, scrollState.totalPages, source.documentHash, source.fileName])
+
+  // Saved state for a file identified after it was shown. Annotations were
+  // blocked until now, so they are adopted as-is; the view only moves if the
+  // reader has not moved it yet.
+  const handledLateRestore = useRef<string | null>(null)
+  useEffect(() => {
+    if (!lateRestore || handledLateRestore.current === lateRestore.id || !scroll || !rotate) return
+    handledLateRestore.current = lateRestore.id
+    const view = lateRestore.view
+    setHighlights(view.highlights)
+    setPreviousHighlights(null)
+    if (currentPage !== 1 || rotation !== 0) return
+    if ([Rotation.Degree90, Rotation.Degree180, Rotation.Degree270].includes(view.rotation))
+      rotate.setRotation(view.rotation as Rotation)
+    if (view.zoom > 0) {
+      setFitMode(null)
+      zoom?.requestZoom(view.zoom)
+    }
+    const page = Math.min(Math.max(1, view.currentPage), scrollState.totalPages || 1)
+    if (page > 1) requestAnimationFrame(() => scroll.scrollToPage({ pageNumber: page, behavior: "instant" }))
+  }, [lateRestore, scroll, rotate, zoom, currentPage, rotation, scrollState.totalPages])
   useEffect(() => {
     if (!revealRequest || !scroll || handledReveal.current === revealRequest.id) return
     const ref = revealRequest.evidence
@@ -573,9 +616,9 @@ function ReaderChrome({
     (next: PdfTextHighlight[]) => {
       setPreviousHighlights(highlights)
       setHighlights(next)
-      onHighlightsChange(next)
+      onAnnotationsChange({ highlights: next })
     },
-    [highlights, onHighlightsChange],
+    [highlights, onAnnotationsChange],
   )
 
   const highlightPages =
@@ -589,6 +632,10 @@ function ReaderChrome({
   const highlightSelection = useCallback(
     (style: PdfHighlightStyle, note?: string) => {
       if (!selection || !selectionMenu) return
+      if (!source.documentHash) {
+        setActionError(PENDING_IDENTITY_MESSAGE)
+        return
+      }
       const pages = createHighlightPages(selectionMenu, selection.forDocument(documentId).getState())
       let next = addOrRestyleHighlight(highlights, selectionMenu, pages, style)
       if (note !== undefined) {
@@ -598,7 +645,7 @@ function ReaderChrome({
       updateHighlights(next)
       clearSelection()
     },
-    [clearSelection, documentId, highlights, updateHighlights, selection, selectionMenu],
+    [clearSelection, documentId, highlights, updateHighlights, selection, selectionMenu, source.documentHash],
   )
 
   const selectionKey = useMemo(
@@ -768,7 +815,7 @@ function ReaderChrome({
           />
         </PagePointerProvider>
       </Rotate>
-      {captureMode && documentState?.document?.pages[page.pageIndex] && (
+      {captureMode && source.documentHash && documentState?.document?.pages[page.pageIndex] && (
         <CaptureOverlay
           registry={registry}
           documentId={documentId}
@@ -831,7 +878,10 @@ function ReaderChrome({
             <IconButton
               label={captureMode ? "캡처 취소" : "그림·표 캡처"}
               pressed={captureMode}
-              onClick={() => setCaptureMode(!captureMode)}
+              onClick={() => {
+                if (!source.documentHash && !captureMode) setActionError(PENDING_IDENTITY_MESSAGE)
+                else setCaptureMode(!captureMode)
+              }}
             >
               <Camera size={17} />
             </IconButton>
@@ -934,7 +984,7 @@ function ReaderChrome({
                 icon={<Undo2 size={13} />}
                 onClick={() => {
                   setHighlights(previousHighlights)
-                  onHighlightsChange(previousHighlights)
+                  onAnnotationsChange({ highlights: previousHighlights })
                   setPreviousHighlights(null)
                 }}
               />
@@ -1272,11 +1322,18 @@ export function EmbedPdfWorkspace(props: EmbedPdfWorkspaceProps) {
     worker: true,
     fontFallback: null,
   })
+  // The source gains its hash after a background identify; that must not
+  // reload the document, so the plugins depend only on what the engine loads.
+  const latest = useRef(props)
+  latest.current = props
+  const { documentId: sourceId, url: sourceUrl } = props.source
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Rebuild only for a different file or saved view.
   const plugins = useMemo(
-    () => createPdfPlugins(props.source, props.initialView),
-    [props.initialView, props.source],
+    () => createPdfPlugins(latest.current.source, latest.current.initialView),
+    [sourceId, sourceUrl, props.initialView],
   )
   const [registry, setRegistry] = useState<PluginRegistry | null>(null)
+  const openedAt = useMemo(() => performance.now(), [])
 
   useEffect(() => {
     if (isLoading)
@@ -1333,7 +1390,14 @@ export function EmbedPdfWorkspace(props: EmbedPdfWorkspaceProps) {
                 </div>
               )
             if (isLoaded && activeDocumentId && registry)
-              return <ReaderChrome {...props} documentId={activeDocumentId} registry={registry} />
+              return (
+                <ReaderChrome
+                  {...props}
+                  documentId={activeDocumentId}
+                  registry={registry}
+                  openedAt={openedAt}
+                />
+              )
             return null
           }}
         </DocumentContent>

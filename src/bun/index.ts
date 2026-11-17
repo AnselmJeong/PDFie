@@ -1,6 +1,7 @@
 import { access } from "node:fs/promises"
 import { join } from "node:path"
 import Electrobun, { BrowserView, BrowserWindow, Utils } from "electrobun/bun"
+import type { PdfOpenResult } from "../shared/pdf/domain"
 import type { AppRPC } from "../shared/rpc/app-rpc"
 import type { StudyEvent } from "../shared/study/contracts"
 import { AiSettingsRepository } from "./ai/ai-settings-repository"
@@ -11,6 +12,7 @@ import { CaptureStore } from "./assets/capture-store"
 import { backgroundIndexer } from "./pdf/background-index"
 import { PdfSourceBridge } from "./pdf/document-source-bridge"
 import { DocumentStateRepository } from "./pdf/document-state-repository"
+import { HashCache } from "./pdf/hash-cache"
 import { restoreMultipleSelectedPaths, restoreSingleSelectedPath } from "./pdf/open-file-dialog"
 import { OpenRequests } from "./pdf/open-requests"
 import { StudyLibrary } from "./persistence/study-library"
@@ -29,7 +31,8 @@ Electrobun.events.on("open-url", (event) => {
   if (typeof url === "string") openRequests.add(url)
 })
 
-const sourceBridge = new PdfSourceBridge()
+const hashCache = await HashCache.open(join(Utils.paths.userData, "pdfie-hash-cache-v1.json"))
+const sourceBridge = new PdfSourceBridge(hashCache)
 await sourceBridge.start()
 const documentStates = await DocumentStateRepository.open(
   join(Utils.paths.userData, "pdfie-documents-v1.json"),
@@ -61,10 +64,23 @@ const importer = new LibraryImporter(
   backgroundIndexer(studyStore),
   recordsChanged,
   (hash) => classifier.indexed(hash),
+  (path, before, hash) => void hashCache.remember(path, before, hash),
 )
-const documentHash = (id: string) => sourceBridge.getSource(id).documentHash
+/** The open document's content hash; waits while a new file is still being hashed. */
+const documentHash = (id: string) => sourceBridge.identify(id)
 
-function restorePdf(source: ReturnType<PdfSourceBridge["getSource"]>) {
+/**
+ * What the viewer needs to open a PDF. A file whose hash is still pending
+ * opens with the default view and no hash-bound records; `pdf.identify`
+ * returns the restored state once the hash is known.
+ */
+function restorePdf(source: ReturnType<PdfSourceBridge["getSource"]>): PdfOpenResult {
+  if (!source.documentHash)
+    return {
+      source,
+      restored: { currentPage: 1, zoom: 0, rotation: 0, highlights: [], marks: [] },
+      persistedType: { documentType: "unknown", source: "auto" },
+    }
   library.remember(source.documentHash, source.fileName, sourceBridge.persistentPath(source.documentId))
   const persisted = documentStates.get(source.documentHash)
   return {
@@ -74,6 +90,7 @@ function restorePdf(source: ReturnType<PdfSourceBridge["getSource"]>) {
       zoom: persisted.zoom,
       rotation: persisted.rotation,
       highlights: persisted.highlights,
+      marks: persisted.marks,
     },
     persistedType: {
       documentType: persisted.documentType,
@@ -277,16 +294,16 @@ function createAppRpc(ownWindow: () => ZoomableWindow | null = () => null) {
             return { document: null }
           }
         },
-        "study.snapshot": async ({ documentId }) => studyStore.snapshot(documentHash(documentId)),
+        "study.snapshot": async ({ documentId }) => studyStore.snapshot(await documentHash(documentId)),
         "study.index.begin": async ({ documentId, pageCount, outline }) => {
-          const hash = documentHash(documentId)
+          const hash = await documentHash(documentId)
           return {
             index: studyStore.begin(hash, pageCount, outline),
             completedPages: studyStore.completedPages(hash),
           }
         },
         "study.index.page": async ({ documentId, page }) => {
-          const hash = documentHash(documentId)
+          const hash = await documentHash(documentId)
           const index = studyStore.ingest(hash, page)
           classifier.indexed(hash)
           return index
@@ -294,23 +311,23 @@ function createAppRpc(ownWindow: () => ZoomableWindow | null = () => null) {
         "study.generate": async (params) => {
           await classifier.pause()
           try {
-            return study.start(documentHash(params.documentId), params)
+            return study.start(await documentHash(params.documentId), params)
           } finally {
             classifier.resume()
           }
         },
         "study.job.status": async ({ documentId, requestId }) =>
-          study.jobStatus(documentHash(documentId), requestId),
+          study.jobStatus(await documentHash(documentId), requestId),
         "study.goal.save": async ({ documentId, goal }) => {
-          study.saveGoal(documentHash(documentId), goal)
+          study.saveGoal(await documentHash(documentId), goal)
           return { saved: true as const }
         },
         "study.goal.delete": async ({ documentId, goalId }) => {
-          studyStore.remove(documentHash(documentId), "goals", goalId)
+          studyStore.remove(await documentHash(documentId), "goals", goalId)
           return { saved: true as const }
         },
         "study.goal.reorder": async ({ documentId, goalIds }) => {
-          const hash = documentHash(documentId),
+          const hash = await documentHash(documentId),
             goals = studyStore.snapshot(hash).goals
           if (
             goalIds.length !== goals.length ||
@@ -334,7 +351,7 @@ function createAppRpc(ownWindow: () => ZoomableWindow | null = () => null) {
           return { saved: true as const }
         },
         "study.section.rename": async ({ documentId, sectionId, title }) => {
-          const hash = documentHash(documentId),
+          const hash = await documentHash(documentId),
             section = studyStore.sections(hash).find((s) => s.id === sectionId)
           if (!section || !title.trim() || title.length > 300) throw new Error("섹션 제목을 확인하세요.")
           studyStore.put(hash, "sectionEdits", sectionId, {
@@ -345,40 +362,41 @@ function createAppRpc(ownWindow: () => ZoomableWindow | null = () => null) {
           return { saved: true as const }
         },
         "study.progress": async ({ documentId, progress }) => {
-          study.progress(documentHash(documentId), progress)
+          study.progress(await documentHash(documentId), progress)
           return { saved: true as const }
         },
         "study.section.splitPoints": async ({ documentId, sectionId }) =>
-          studyStore.sectionSplitPoints(documentHash(documentId), sectionId),
+          studyStore.sectionSplitPoints(await documentHash(documentId), sectionId),
         "study.section.split": async ({ documentId, blockId, title }) => {
-          const hash = documentHash(documentId)
+          const hash = await documentHash(documentId)
           if (study.isActive(hash)) throw new Error("생성이 끝난 뒤 섹션을 수정하세요.")
           studyStore.splitSection(hash, blockId, title)
           return { saved: true as const }
         },
         "study.section.merge": async ({ documentId, sectionId }) => {
-          const hash = documentHash(documentId)
+          const hash = await documentHash(documentId)
           if (study.isActive(hash)) throw new Error("생성이 끝난 뒤 섹션을 수정하세요.")
           studyStore.mergeSection(hash, sectionId)
           return { saved: true as const }
         },
         "study.assess": async ({ documentId, ...params }) => {
-          const hash = documentHash(documentId)
+          const hash = await documentHash(documentId)
           study.assess(hash, params.lessonId, params.stepIndex, params.choice, params.revealed)
           return studyStore.snapshot(hash)
         },
         "study.capture.save": async ({ documentId, capture }) =>
-          captureStore.save(documentHash(documentId), capture),
+          captureStore.save(await documentHash(documentId), capture),
         "study.capture.remove": async ({ documentId, captureId }) => {
-          captureStore.removeUnused(documentHash(documentId), captureId)
+          captureStore.removeUnused(await documentHash(documentId), captureId)
           return { saved: true as const }
         },
         "study.export": async ({ documentId }) => {
+          const hash = await documentHash(documentId)
           const source = sourceBridge.getSource(documentId)
-          return exportRecords(source.documentHash, source.fileName.replace(/\.pdf$/i, ""))
+          return exportRecords(hash, source.fileName.replace(/\.pdf$/i, ""))
         },
         "study.clear": async ({ documentId }) => {
-          const hash = documentHash(documentId)
+          const hash = await documentHash(documentId)
           if (study.isActive(hash)) throw new Error("생성을 중지한 뒤 기록을 삭제하세요.")
           captureStore.clear(hash)
           studyStore.clear(hash)
@@ -405,6 +423,10 @@ function createAppRpc(ownWindow: () => ZoomableWindow | null = () => null) {
         },
         "app.ping": async () => ({ ok: true as const, renderer: "native" as const }),
         "pdf.openDialog": async () => choosePdf(),
+        "pdf.identify": async ({ documentId }) => {
+          await documentHash(documentId)
+          return restorePdf(sourceBridge.getSource(documentId))
+        },
         "pdf.takeOpenRequests": async () => {
           const opened: ReturnType<typeof restorePdf>[] = []
           const failed: string[] = []
@@ -419,7 +441,9 @@ function createAppRpc(ownWindow: () => ZoomableWindow | null = () => null) {
           return { opened, failed }
         },
         "pdf.close": async ({ documentId }) => {
-          await study.stop(undefined, documentHash(documentId))
+          // A file still being hashed has no study records to stop yet.
+          const hash = sourceBridge.getSource(documentId).documentHash
+          if (hash) await study.stop(undefined, hash)
           return { closed: sourceBridge.closeDocument(documentId) }
         },
         "pdf.saveState": async ({ documentHash, ...patch }) => {

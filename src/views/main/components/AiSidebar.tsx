@@ -17,7 +17,7 @@ import {
   X,
 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import type { PdfSelection, PdfViewerSource, SelectionAiRequest } from "../../../shared/pdf/domain"
+import type { IdentifiedPdfSource, PdfSelection, SelectionAiRequest } from "../../../shared/pdf/domain"
 import type {
   CaptureAsset,
   EvidenceRef,
@@ -79,7 +79,7 @@ export function AiSidebar({
   selection: PdfSelection | null
   request: SelectionAiRequest | null
   visible: boolean
-  source: PdfViewerSource
+  source: IdentifiedPdfSource
   capture: CaptureAsset | null
   onDismissCapture: () => void
   onStartCapture: () => void

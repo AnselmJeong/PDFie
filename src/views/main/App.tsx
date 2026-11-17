@@ -1,16 +1,20 @@
 import { useToast } from "@astryxdesign/core/Toast"
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { ClassificationResult } from "../../shared/pdf/classification"
-import type {
-  PdfOpenResult,
-  PdfSelection,
-  PdfTextHighlight,
-  PdfViewerSource,
-  SelectionAiRequest,
+import {
+  isIdentified,
+  type PdfOpenResult,
+  type PdfSelection,
+  type PdfViewerSource,
+  type SelectionAiRequest,
 } from "../../shared/pdf/domain"
 import type { CaptureAsset, EvidenceRef } from "../../shared/study/contracts"
 import { AiSidebar } from "./components/AiSidebar"
-import { EmbedPdfWorkspace, type ReaderStatus } from "./features/pdf/adapters/EmbedPdfWorkspace"
+import {
+  EmbedPdfWorkspace,
+  type LateRestore,
+  type ReaderStatus,
+} from "./features/pdf/adapters/EmbedPdfWorkspace"
 import { StudyLibrary } from "./features/study/StudyLibrary"
 import { rpc } from "./rpc"
 
@@ -36,12 +40,14 @@ export function App() {
   const [aiRequest, setAiRequest] = useState<SelectionAiRequest | null>(null)
   const [classification, setClassification] = useState(initialClassification)
   const [typeSource, setTypeSource] = useState<"auto" | "user">("auto")
-  const [initialView, setInitialView] = useState({
+  const [initialView, setInitialView] = useState<PdfOpenResult["restored"]>({
     currentPage: 1,
     zoom: 0,
     rotation: 0,
-    highlights: [] as PdfTextHighlight[],
+    highlights: [],
+    marks: [],
   })
+  const [lateRestore, setLateRestore] = useState<LateRestore | null>(null)
   const openingRef = useRef(false)
   const [capture, setCapture] = useState<CaptureAsset | null>(null)
   const [captureRequest, setCaptureRequest] = useState<string | null>(null)
@@ -55,36 +61,68 @@ export function App() {
     setCapture(null)
   }, [capture, source])
 
+  const applyPersistedType = useCallback((persisted: PdfOpenResult["persistedType"]) => {
+    if (persisted.source === "user") {
+      setClassification({ ...initialClassification, documentType: persisted.documentType, confidence: 1 })
+      setTypeSource("user")
+    } else {
+      setClassification(initialClassification)
+      setTypeSource("auto")
+    }
+  }, [])
+
   const applyOpenResult = useCallback(
     async (result: PdfOpenResult) => {
       setView("reader")
-      if (source?.documentHash === result.source.documentHash) {
+      if (source?.documentHash && source.documentHash === result.source.documentHash) {
         await rpc.request["pdf.close"]({ documentId: result.source.documentId })
         return
       }
       if (source) await rpc.request["pdf.close"]({ documentId: source.documentId })
       setSource(result.source)
       setInitialView(result.restored)
+      setLateRestore(null)
       setStatus(initialStatus)
       setSelection(null)
       setCapture(null)
       setCaptureRequest(null)
       setRevealRequest(null)
       setAiRequest(null)
-      if (result.persistedType.source === "user") {
-        setClassification({
-          ...initialClassification,
-          documentType: result.persistedType.documentType,
-          confidence: 1,
-        })
-        setTypeSource("user")
-      } else {
-        setClassification(initialClassification)
-        setTypeSource("auto")
-      }
+      applyPersistedType(result.persistedType)
     },
-    [source],
+    [source, applyPersistedType],
   )
+
+  // A newly seen file opens before its hash is known. Once the background
+  // hash finishes, attach its library entry and any saved records.
+  const pendingDocumentId = source && !isIdentified(source) ? source.documentId : null
+  useEffect(() => {
+    if (!pendingDocumentId) return
+    let cancelled = false
+    const identify = async () => {
+      // A very large file can take longer than one request's time limit.
+      for (let attempt = 0; ; attempt++) {
+        try {
+          return await rpc.request["pdf.identify"]({ documentId: pendingDocumentId })
+        } catch (cause) {
+          if (cancelled || attempt >= 9) throw cause
+        }
+      }
+    }
+    void identify()
+      .then((result) => {
+        if (cancelled) return
+        setSource((current) => (current?.documentId === pendingDocumentId ? result.source : current))
+        applyPersistedType(result.persistedType)
+        setLateRestore({ id: crypto.randomUUID(), view: result.restored })
+      })
+      .catch((cause) => {
+        if (!cancelled) setError(cause instanceof Error ? cause.message : "PDF를 확인하지 못했습니다.")
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [pendingDocumentId, applyPersistedType])
 
   const openPdf = useCallback(async () => {
     if (openingRef.current) return
@@ -137,7 +175,7 @@ export function App() {
     (result: ClassificationResult) => {
       if (typeSource === "auto") {
         setClassification(result)
-        if (source)
+        if (source?.documentHash)
           void rpc.request["pdf.saveState"]({
             documentHash: source.documentHash,
             documentType: result.documentType,
@@ -185,10 +223,11 @@ export function App() {
   }, [])
 
   useEffect(() => {
-    if (!source || status.phase !== "ready") return
+    const documentHash = source?.documentHash
+    if (!documentHash || status.phase !== "ready") return
     const timeout = window.setTimeout(() => {
       void rpc.request["pdf.saveState"]({
-        documentHash: source.documentHash,
+        documentHash,
         currentPage: status.page,
         zoom: status.zoom,
         rotation: status.rotation,
@@ -236,11 +275,12 @@ export function App() {
       if (!source) return
       setClassification((current) => ({ ...current, documentType, confidence: 1 }))
       setTypeSource("user")
-      void rpc.request["pdf.saveState"]({
-        documentHash: source.documentHash,
-        documentType,
-        documentTypeSource: "user",
-      })
+      if (source.documentHash)
+        void rpc.request["pdf.saveState"]({
+          documentHash: source.documentHash,
+          documentType,
+          documentTypeSource: "user",
+        })
     },
     [source],
   )
@@ -250,7 +290,7 @@ export function App() {
     <StudyLibrary
       onOpenPdf={() => void openPdf()}
       opening={opening}
-      currentHash={source?.documentHash}
+      currentHash={source?.documentHash ?? undefined}
       onReturn={source ? () => setView("reader") : undefined}
       onDeleted={(hash) => {
         if (hash === source?.documentHash) void closePdf().catch(() => setSource(null))
@@ -289,14 +329,13 @@ export function App() {
               setFocusMode(false)
               setChatOpen(true)
             }}
-            onHighlightsChange={(highlights) =>
-              void rpc.request["pdf.saveState"]({
-                documentHash: source.documentHash,
-                highlights,
-              }).catch(() =>
+            lateRestore={lateRestore}
+            onAnnotationsChange={(patch) => {
+              if (!source.documentHash) return
+              void rpc.request["pdf.saveState"]({ documentHash: source.documentHash, ...patch }).catch(() =>
                 setError("하이라이트와 주석을 저장하지 못했습니다. 앱을 닫기 전에 다시 시도해 주세요."),
               )
-            }
+            }}
             onStatusChange={setStatus}
             onClassificationChange={handleClassification}
             chrome={{
@@ -326,18 +365,25 @@ export function App() {
           />
         </div>
         <div hidden={!chatOpen || focusMode} className="ai-sidebar-container">
-          <AiSidebar
-            key={source.documentId}
-            visible={chatOpen && !focusMode}
-            request={aiRequest}
-            selection={selection}
-            source={source}
-            capture={capture}
-            onDismissCapture={dismissCapture}
-            onStartCapture={() => setCaptureRequest(crypto.randomUUID())}
-            onReveal={(evidence) => setRevealRequest({ id: crypto.randomUUID(), evidence })}
-            onClose={() => setChatOpen(false)}
-          />
+          {isIdentified(source) ? (
+            <AiSidebar
+              key={source.documentId}
+              visible={chatOpen && !focusMode}
+              request={aiRequest}
+              selection={selection}
+              source={source}
+              capture={capture}
+              onDismissCapture={dismissCapture}
+              onStartCapture={() => setCaptureRequest(crypto.randomUUID())}
+              onReveal={(evidence) => setRevealRequest({ id: crypto.randomUUID(), evidence })}
+              onClose={() => setChatOpen(false)}
+            />
+          ) : (
+            <aside className="ai-sidebar ai-sidebar-pending" aria-busy="true">
+              <span className="loading-mark" />
+              <p>처음 여는 PDF를 확인하고 있습니다. 확인이 끝나면 학습 기록과 AI를 쓸 수 있습니다.</p>
+            </aside>
+          )}
         </div>
       </div>
     </>

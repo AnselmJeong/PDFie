@@ -5,6 +5,7 @@ import { basename, join } from "node:path"
 import { INDEX_VERSION } from "../../shared/study/contracts"
 import type { LibraryImportStatus } from "../../shared/study/library"
 import type { BackgroundIndexer } from "../pdf/background-index"
+import { type FileFingerprint, fingerprintOf } from "../pdf/hash-cache"
 import type { StudyLibrary } from "../persistence/study-library"
 import type { StudyStore } from "../persistence/study-store"
 
@@ -22,6 +23,8 @@ export class LibraryImporter {
     private index: BackgroundIndexer,
     private changed: (hash: string) => void,
     private classified: (hash: string) => void,
+    /** Lets the viewer reuse the import's full-file hash when the file opens. */
+    private hashed: (path: string, before: FileFingerprint, hash: string) => void = () => undefined,
   ) {
     store.db.exec(`CREATE TABLE IF NOT EXISTS library_import_batches(id TEXT PRIMARY KEY,phase TEXT NOT NULL,roots TEXT NOT NULL,notes TEXT NOT NULL,created_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS library_import_items(id TEXT PRIMARY KEY,batch_id TEXT NOT NULL REFERENCES library_import_batches(id),path TEXT NOT NULL,hash TEXT,state TEXT NOT NULL,error TEXT NOT NULL DEFAULT '',UNIQUE(batch_id,path));
@@ -160,12 +163,14 @@ export class LibraryImporter {
         const file = Bun.file(item.path)
         if (file.size > 512 * 1024 * 1024) throw new Error("512MB보다 큰 PDF는 개별적으로 열어 주세요.")
         if ((await file.slice(0, 5).text()) !== "%PDF-") throw new Error("유효한 PDF 파일이 아닙니다.")
+        const before = await fingerprintOf(item.path)
         const digest = createHash("sha256")
         for await (const chunk of createReadStream(item.path)) {
           signal.throwIfAborted()
           digest.update(chunk)
         }
         hash = digest.digest("hex")
+        this.hashed(item.path, before, hash)
         signal.throwIfAborted()
         this.store.db.query("UPDATE library_import_items SET hash=? WHERE id=?").run(hash, item.id)
         const existing = this.library.contains(hash)
